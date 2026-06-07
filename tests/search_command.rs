@@ -1,7 +1,6 @@
 use std::fs;
 use std::path::Path;
 
-use predicates::prelude::*;
 use tempfile::TempDir;
 
 mod support;
@@ -54,9 +53,7 @@ fn searches_entries_as_json() {
         ])
         .assert()
         .success()
-        .stdout(predicate::str::contains("\"personal/openai.com\""))
-        .stdout(predicate::str::contains("\"work/OpenAI Admin\""))
-        .stdout(predicate::str::contains("\"personal/github.com\"").not());
+        .stdout("[\n  \"personal/openai.com\",\n  \"work/OpenAI Admin\"\n]\n");
 }
 
 #[test]

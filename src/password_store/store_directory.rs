@@ -100,6 +100,26 @@ pub enum PasswordStoreError {
     Io(#[from] std::io::Error),
 }
 
+impl PasswordStoreError {
+    pub fn code(&self) -> &'static str {
+        match self {
+            Self::StoreNotFound(_) => "store_not_found",
+            Self::StoreIsNotDirectory(_) => "store_is_not_directory",
+            Self::HomeDirectoryUnavailable => "home_directory_unavailable",
+            Self::EntryOutsideStore(_) => "entry_outside_store",
+            Self::EntryNotFound(_) => "entry_not_found",
+            Self::InvalidEntryName { .. } => "invalid_entry_name",
+            Self::GpgNotFound => "gpg_not_found",
+            Self::GpgDecryptFailed(_) => "gpg_decrypt_failed",
+            Self::GpgOutputNotUtf8(_) => "gpg_output_not_utf8",
+            Self::GpgVersionFailed(_) => "gpg_version_failed",
+            Self::OtpNotFound => "otp_not_found",
+            Self::InvalidOtpUri(_) => "invalid_otp_uri",
+            Self::Io(_) => "io_error",
+        }
+    }
+}
+
 fn password_store_dir_from_environment() -> Option<PathBuf> {
     env::var_os("PASSWORD_STORE_DIR")
         .filter(|value| !value.is_empty())

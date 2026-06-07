@@ -42,8 +42,30 @@ fn lists_password_store_entries_as_json() {
         ])
         .assert()
         .success()
-        .stdout(predicate::str::contains("\"email/work\""))
-        .stdout(predicate::str::contains("\"github\""));
+        .stdout("[\n  \"email/work\",\n  \"github\"\n]\n");
+}
+
+#[test]
+fn lists_edge_case_entry_names() {
+    let store = password_store_with_entries([
+        "personal/OpenAI.com.gpg",
+        "personal/BlackMagic Cloud.gpg",
+        "work/rxtsel.dev/email/contact@rxtsel.dev.gpg",
+    ]);
+
+    Command::cargo_bin("rpass")
+        .expect("rpass binary")
+        .args([
+            "--store-dir",
+            store.path().to_str().expect("store path"),
+            "list",
+            "--json",
+        ])
+        .assert()
+        .success()
+        .stdout(
+            "[\n  \"personal/BlackMagic Cloud\",\n  \"personal/OpenAI.com\",\n  \"work/rxtsel.dev/email/contact@rxtsel.dev\"\n]\n",
+        );
 }
 
 #[test]

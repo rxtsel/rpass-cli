@@ -45,14 +45,9 @@ fn shows_decrypted_entry_as_json() {
         ])
         .assert()
         .success()
-        .stdout(predicate::str::contains("\"name\": \"email/work\""))
-        .stdout(predicate::str::contains("\"password\": \"secret\""))
-        .stdout(predicate::str::contains("\"name\": \"username\""))
-        .stdout(predicate::str::contains("\"value\": \"alice\""))
-        .stdout(predicate::str::contains(
-            "\"otp_uri\": \"otpauth://totp/example\"",
-        ))
-        .stdout(predicate::str::contains("\"note\""));
+        .stdout(
+            "{\n  \"name\": \"email/work\",\n  \"password\": \"secret\",\n  \"fields\": [\n    {\n      \"name\": \"username\",\n      \"value\": \"alice\"\n    },\n    {\n      \"name\": \"url\",\n      \"value\": \"https://example.com\"\n    }\n  ],\n  \"otp_uri\": \"otpauth://totp/example\",\n  \"extra_lines\": [\n    \"note\"\n  ]\n}\n",
+        );
 }
 
 #[test]
@@ -86,6 +81,26 @@ fn reports_invalid_entry_name() {
         .assert()
         .failure()
         .stderr(predicate::str::contains("invalid entry name '../outside'"));
+}
+
+#[test]
+fn reports_invalid_entry_name_as_json() {
+    let store = TempDir::new().expect("temp dir");
+
+    rpass()
+        .args([
+            "--store-dir",
+            store.path().to_str().expect("store path"),
+            "show",
+            "../outside",
+            "--json",
+        ])
+        .assert()
+        .failure()
+        .stdout("")
+        .stderr(
+            "{\n  \"error\": {\n    \"code\": \"invalid_entry_name\",\n    \"message\": \"invalid entry name '../outside': entry name cannot contain '.' or '..' path segments\"\n  }\n}\n",
+        );
 }
 
 #[test]

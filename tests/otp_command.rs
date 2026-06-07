@@ -65,6 +65,28 @@ fn reports_entry_without_otp_uri() {
 }
 
 #[test]
+fn reports_entry_without_otp_uri_as_json() {
+    let store = password_store_with_entry("email/work.gpg");
+    let gpg = successful_gpg_script(store.path(), "secret\nusername: alice\n");
+
+    rpass()
+        .env("PASSWORD_STORE_GPG", gpg)
+        .args([
+            "--store-dir",
+            store.path().to_str().expect("store path"),
+            "otp",
+            "email/work",
+            "--json",
+        ])
+        .assert()
+        .failure()
+        .stdout("")
+        .stderr(
+            "{\n  \"error\": {\n    \"code\": \"otp_not_found\",\n    \"message\": \"entry does not contain an otpauth URI\"\n  }\n}\n",
+        );
+}
+
+#[test]
 fn reports_invalid_otp_uri() {
     let store = password_store_with_entry("email/work.gpg");
     let gpg = successful_gpg_script(store.path(), "secret\notpauth://totp/example\n");

@@ -42,7 +42,7 @@ repositories with structured JSON output.
 
 ### CLI Surface
 
-- [ ] Keep commands and flags aligned with common CLI standards unless there is
+- [x] Keep commands and flags aligned with common CLI standards unless there is
   a clear password-store compatibility reason to differ.
 - [x] `rpass list`
 - [x] `rpass list --json`
@@ -68,7 +68,7 @@ repositories with structured JSON output.
 - [x] Convert file paths into password-store entry names.
 - [x] Ignore non-entry files such as `.gpg-id` and Git metadata.
 - [x] Sort entries deterministically.
-- [ ] Add fixtures for nested stores and edge-case entry names.
+- [x] Add fixtures for nested stores and edge-case entry names.
 
 ### GPG Decryption
 
@@ -95,10 +95,10 @@ repositories with structured JSON output.
 
 ### JSON Contract
 
-- [ ] Define stable response structs.
-- [ ] Define stable error structs.
-- [ ] Keep JSON field names explicit and integration-friendly.
-- [ ] Add snapshot-style tests for JSON output.
+- [x] Define stable response structs.
+- [x] Define stable error structs.
+- [x] Keep JSON field names explicit and integration-friendly.
+- [x] Add snapshot-style tests for JSON output.
 
 ## Phase 2: Compatible Writes
 

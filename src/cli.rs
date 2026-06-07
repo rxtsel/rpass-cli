@@ -94,14 +94,38 @@ struct DoctorCommand {
 
 pub fn run() -> Result<(), CliError> {
     let cli = Cli::parse();
+    let wants_json_error = cli.command.wants_json();
     let store_directory = StoreDirectory::resolve(cli.store_dir)?;
 
-    match cli.command {
+    let result = match cli.command {
         Command::List(command) => list_entries(command, store_directory),
         Command::Show(command) => show_entry(command, store_directory),
         Command::Otp(command) => generate_otp(command, store_directory),
         Command::Search(command) => search_entries(command, store_directory),
         Command::Doctor(command) => run_doctor(command, store_directory),
+    };
+
+    if let Err(error) = result {
+        if wants_json_error {
+            print_json_error(&error)?;
+            return Err(CliError::Reported);
+        }
+
+        return Err(error);
+    }
+
+    Ok(())
+}
+
+impl Command {
+    fn wants_json(&self) -> bool {
+        match self {
+            Self::List(command) => command.json,
+            Self::Show(command) => command.json,
+            Self::Otp(command) => command.json,
+            Self::Search(command) => command.json,
+            Self::Doctor(command) => command.json,
+        }
     }
 }
 
@@ -241,6 +265,17 @@ fn print_json_doctor(report: &DoctorReport) -> Result<(), CliError> {
     Ok(())
 }
 
+fn print_json_error(error: &CliError) -> Result<(), CliError> {
+    let json = serde_json::to_string_pretty(&ErrorJson {
+        error: ErrorBody {
+            code: error.code(),
+            message: error.to_string(),
+        },
+    })?;
+    eprintln!("{json}");
+    Ok(())
+}
+
 #[derive(Debug, Serialize)]
 struct ShowEntryJson<'entry> {
     name: &'entry str,
@@ -258,6 +293,17 @@ struct OtpJson<'entry> {
     period: u64,
 }
 
+#[derive(Debug, Serialize)]
+struct ErrorJson<'error> {
+    error: ErrorBody<'error>,
+}
+
+#[derive(Debug, Serialize)]
+struct ErrorBody<'error> {
+    code: &'error str,
+    message: String,
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum CliError {
     #[error(transparent)]
@@ -271,4 +317,23 @@ pub enum CliError {
 
     #[error("doctor checks failed")]
     DoctorFailed,
+
+    #[error("error already reported")]
+    Reported,
+}
+
+impl CliError {
+    pub fn should_print(&self) -> bool {
+        !matches!(self, Self::Reported)
+    }
+
+    fn code(&self) -> &'static str {
+        match self {
+            Self::PasswordStore(error) => error.code(),
+            Self::Json(_) => "json_serialization_failed",
+            Self::SystemClock(_) => "system_clock_before_unix_epoch",
+            Self::DoctorFailed => "doctor_checks_failed",
+            Self::Reported => "reported",
+        }
+    }
 }

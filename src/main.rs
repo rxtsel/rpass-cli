@@ -4,7 +4,9 @@ fn main() -> ExitCode {
     match rpass::run() {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
-            eprintln!("{error}");
+            if error.should_print() {
+                eprintln!("{error}");
+            }
             ExitCode::FAILURE
         }
     }

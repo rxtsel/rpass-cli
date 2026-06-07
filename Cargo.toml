@@ -2,6 +2,15 @@
 name = "rpass"
 version = "0.1.0"
 edition = "2024"
+authors = ["rxtsel"]
+description = "Native password-store compatible backend"
+repository = "https://github.com/rxtsel/rpass"
+
+[package.metadata.wix]
+upgrade-guid = "694EFC21-7422-4882-912D-65A6F84315EC"
+path-guid = "4FC40D79-8BEA-4CE3-BEA1-B51BE50A26B6"
+license = false
+eula = false
 
 [dependencies]
 clap = { version = "4.6.1", features = ["derive"] }
@@ -16,3 +25,8 @@ url = "2.5.8"
 assert_cmd = "2.2.2"
 predicates = "3.1.4"
 tempfile = "3.27.0"
+
+# The profile that 'dist' will build with
+[profile.dist]
+inherits = "release"
+lto = "thin"

@@ -145,6 +145,9 @@ Goal: earn stronger compatibility claims through automated evidence.
 - [x] Document known differences from `pass`.
 - [x] Add cross-platform CI for Windows, macOS, and Linux.
 - [ ] Decide which `pass` CLI flags are intentionally unsupported.
+- [ ] Add Debian package release asset.
+- [ ] Add AppImage release asset.
+- [ ] Add AUR packaging for Arch users.
 
 ## Near-Term Technical Notes
 

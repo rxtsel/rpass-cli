@@ -123,12 +123,17 @@ Known differences from `pass`:
 
 ## Releases
 
-Releases are automated with release-plz and Conventional Commits.
+Releases use release-plz, cargo-dist, and Conventional Commits.
 
 On pushes to `main`, release-plz maintains a release pull request with version
 and changelog updates. Normal development pushes do not create releases.
-Merging the release pull request creates the `vX.Y.Z` tag and GitHub Release.
-Publishing to crates.io is disabled for now.
+Merging the release pull request creates the `vX.Y.Z` tag. cargo-dist then
+builds release assets and creates or updates the GitHub Release. Publishing to
+crates.io is disabled for now.
+
+Release assets include macOS Intel, macOS Apple Silicon, Linux x86_64, Linux
+ARM64, Linux musl x86_64, Windows zip, Windows MSI, shell and PowerShell
+installers, and checksums.
 
 For the current crate version, see `Cargo.toml`.
 

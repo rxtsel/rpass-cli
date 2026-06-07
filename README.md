@@ -55,11 +55,12 @@ otpauth://totp/...
 
 ## Current Scope
 
-`rpass` is currently a read-only backend. It reads existing password-store
-repositories and decrypts existing `.gpg` entries with external GnuPG.
+`rpass` reads existing password-store repositories and decrypts existing `.gpg`
+entries with external GnuPG. It also supports inserting new entries with
+external GnuPG encryption.
 
-Write commands such as `insert`, `edit`, `generate`, `rm`, `mv`, and store
-initialization are intentionally not implemented yet.
+Write commands such as `edit`, `generate`, `rm`, `mv`, and store initialization
+are intentionally not implemented yet.
 
 ## Commands
 
@@ -71,6 +72,7 @@ rpass search openai --json
 rpass show personal/openai.com
 rpass show personal/openai.com --json
 rpass show personal/openai.com --json --passphrase-stdin
+printf 'password\nusername: alice\n' | rpass insert personal/openai.com
 rpass otp personal/openai.com
 rpass otp personal/openai.com --json
 rpass otp personal/openai.com --json --passphrase-stdin
@@ -114,7 +116,7 @@ Supported behavior:
 
 Known differences from `pass`:
 
-- only read-only commands are supported;
+- write support is limited to `insert`;
 - shell completion, clipboard, QR code, Git, and edit workflows are not
   implemented;
 - unsupported `pass` flags are rejected instead of ignored;

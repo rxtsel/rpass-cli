@@ -105,14 +105,14 @@ repositories with structured JSON output.
 Goal: add write operations while preserving interoperability with `pass`, iOS,
 Android Password Store, and existing Git-based stores.
 
-- [ ] `rpass insert <entry>`
+- [x] `rpass insert <entry>`
 - [ ] `rpass edit <entry>`
 - [ ] `rpass generate <entry> <length>`
 - [ ] `rpass rm <entry>`
 - [ ] `rpass mv <old-entry> <new-entry>`
-- [ ] Resolve recipients from the nearest `.gpg-id`.
-- [ ] Encrypt with external `gpg`.
-- [ ] Preserve directory-level recipient behavior.
+- [x] Resolve recipients from the nearest `.gpg-id`.
+- [x] Encrypt with external `gpg`.
+- [x] Preserve directory-level recipient behavior.
 - [ ] Add compatibility fixtures for encrypted writes.
 
 ## Phase 3: Git Integration

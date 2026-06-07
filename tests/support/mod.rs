@@ -117,6 +117,85 @@ pub fn empty_success_gpg_script(directory: &Path) -> PathBuf {
 
 #[cfg(windows)]
 #[allow(dead_code)]
+pub fn encrypting_gpg_script(directory: &Path) -> PathBuf {
+    let script = directory.join("gpg-encrypt.cmd");
+    let recipients_file = directory.join("gpg-recipients.txt");
+
+    fs::write(
+        &script,
+        format!(
+            r#"@echo off
+setlocal enabledelayedexpansion
+set output=
+if exist "{recipients}" del "{recipients}"
+:args
+if "%~1"=="" goto readstdin
+if "%~1"=="--recipient" (
+  echo %~2>>"{recipients}"
+  shift
+  shift
+  goto args
+)
+if "%~1"=="--output" (
+  set output=%~2
+  shift
+  shift
+  goto args
+)
+shift
+goto args
+:readstdin
+findstr /r ".*" > "%output%"
+exit /b 0
+"#,
+            recipients = recipients_file.display()
+        ),
+    )
+    .expect("script");
+    script
+}
+
+#[cfg(not(windows))]
+#[allow(dead_code)]
+pub fn encrypting_gpg_script(directory: &Path) -> PathBuf {
+    let script = directory.join("gpg-encrypt");
+    let recipients_file = directory.join("gpg-recipients.txt");
+
+    fs::write(
+        &script,
+        format!(
+            r#"#!/bin/sh
+set -eu
+recipients_file='{}'
+: > "$recipients_file"
+output=''
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --recipient)
+      printf '%s\n' "$2" >> "$recipients_file"
+      shift 2
+      ;;
+    --output)
+      output="$2"
+      shift 2
+      ;;
+    *)
+      shift
+      ;;
+  esac
+done
+cat > "$output"
+"#,
+            recipients_file.display()
+        ),
+    )
+    .expect("script");
+    make_executable(&script);
+    script
+}
+
+#[cfg(windows)]
+#[allow(dead_code)]
 pub fn failing_gpg_script(directory: &Path, message: &str) -> PathBuf {
     let script = directory.join("gpg-fail.cmd");
 

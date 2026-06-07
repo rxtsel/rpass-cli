@@ -72,6 +72,51 @@ impl GpgCommand {
         cmd
     }
 
+    pub fn encrypt(
+        &self,
+        content: &str,
+        output_file: &Path,
+        recipients: &[String],
+    ) -> Result<(), PasswordStoreError> {
+        let mut cmd = Command::new(&self.program);
+        cmd.arg("--quiet")
+            .arg("--batch")
+            .arg("--yes")
+            .arg("--no-tty")
+            .arg("--encrypt")
+            .arg("--output")
+            .arg(output_file)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
+
+        for recipient in recipients {
+            cmd.arg("--recipient").arg(recipient);
+        }
+
+        let mut child = cmd.spawn().map_err(map_gpg_spawn_error)?;
+        let stdin_error = match child.stdin.take() {
+            Some(mut stdin) => stdin.write_all(content.as_bytes()).err(),
+            None => Some(std::io::Error::new(
+                std::io::ErrorKind::BrokenPipe,
+                "gpg stdin was unavailable",
+            )),
+        };
+        let output = child.wait_with_output().map_err(map_gpg_spawn_error)?;
+
+        if output.status.success() {
+            if let Some(error) = stdin_error {
+                return Err(PasswordStoreError::Io(error));
+            }
+
+            return Ok(());
+        }
+
+        Err(PasswordStoreError::GpgEncryptFailed(gpg_error_message(
+            &output.stderr,
+        )))
+    }
+
     pub fn program_display(&self) -> String {
         self.program.to_string_lossy().into_owned()
     }

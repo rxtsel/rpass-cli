@@ -3,8 +3,11 @@ mod tree_output;
 use std::path::PathBuf;
 
 use clap::{ArgAction, Parser, Subcommand, ValueHint};
+use serde::Serialize;
 
-use crate::password_store::{ListEntries, PasswordStore, StoreDirectory};
+use crate::password_store::{
+    DecryptedEntry, GpgCommand, ListEntries, PasswordStore, ShowEntry, StoreDirectory,
+};
 use tree_output::EntryTree;
 
 #[derive(Debug, Parser)]
@@ -37,10 +40,21 @@ struct Cli {
 enum Command {
     #[command(about = "List password store entries")]
     List(ListCommand),
+
+    #[command(about = "Show a password store entry")]
+    Show(ShowCommand),
 }
 
 #[derive(Debug, Parser)]
 struct ListCommand {
+    #[arg(long)]
+    json: bool,
+}
+
+#[derive(Debug, Parser)]
+struct ShowCommand {
+    entry: String,
+
     #[arg(long)]
     json: bool,
 }
@@ -51,6 +65,7 @@ pub fn run() -> Result<(), CliError> {
 
     match cli.command {
         Command::List(command) => list_entries(command, store_directory),
+        Command::Show(command) => show_entry(command, store_directory),
     }
 }
 
@@ -76,6 +91,41 @@ fn print_json_entries(entries: &[String]) -> Result<(), CliError> {
     let json = serde_json::to_string_pretty(entries)?;
     println!("{json}");
     Ok(())
+}
+
+fn show_entry(command: ShowCommand, store_directory: StoreDirectory) -> Result<(), CliError> {
+    let store = PasswordStore::open(store_directory)?;
+    let gpg = GpgCommand::from_environment();
+    let output = ShowEntry::new(&store, &gpg).execute(&command.entry)?;
+
+    if command.json {
+        print_json_entry(&command.entry, output.parsed)?;
+    } else {
+        print!("{}", output.content);
+    }
+
+    Ok(())
+}
+
+fn print_json_entry(entry_name: &str, entry: DecryptedEntry) -> Result<(), CliError> {
+    let json = serde_json::to_string_pretty(&ShowEntryJson {
+        name: entry_name,
+        password: &entry.password,
+        fields: &entry.fields,
+        otp_uri: entry.otp_uri.as_deref(),
+        extra_lines: &entry.extra_lines,
+    })?;
+    println!("{json}");
+    Ok(())
+}
+
+#[derive(Debug, Serialize)]
+struct ShowEntryJson<'entry> {
+    name: &'entry str,
+    password: &'entry str,
+    fields: &'entry [crate::password_store::EntryField],
+    otp_uri: Option<&'entry str>,
+    extra_lines: &'entry [String],
 }
 
 #[derive(Debug, thiserror::Error)]

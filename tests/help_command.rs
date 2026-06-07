@@ -15,5 +15,8 @@ fn prints_concise_root_help() {
         .stdout(predicate::str::contains(
             "list  List password store entries",
         ))
+        .stdout(predicate::str::contains(
+            "show  Show a password store entry",
+        ))
         .stdout(predicate::str::contains("help  Print").not());
 }

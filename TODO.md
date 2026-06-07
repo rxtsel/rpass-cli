@@ -46,8 +46,8 @@ repositories with structured JSON output.
   a clear password-store compatibility reason to differ.
 - [x] `rpass list`
 - [x] `rpass list --json`
-- [ ] `rpass show <entry>`
-- [ ] `rpass show <entry> --json`
+- [x] `rpass show <entry>`
+- [x] `rpass show <entry> --json`
 - [ ] `rpass otp <entry>`
 - [ ] `rpass otp <entry> --json`
 - [ ] `rpass search <query>`
@@ -70,19 +70,19 @@ repositories with structured JSON output.
 
 ### GPG Decryption
 
-- [ ] Add a narrow GPG adapter for invoking external `gpg`.
-- [ ] Keep command construction isolated and testable.
-- [ ] Surface decryption failures as structured application errors.
-- [ ] Avoid leaking decrypted secrets into logs or debug output.
+- [x] Add a narrow GPG adapter for invoking external `gpg`.
+- [x] Keep command construction isolated and testable.
+- [x] Surface decryption failures as structured application errors.
+- [x] Avoid leaking decrypted secrets into logs or debug output.
 
 ### Entry Parsing
 
-- [ ] Parse the first line as the password.
-- [ ] Parse common metadata fields such as `username`, `login`, `email`, and
+- [x] Parse the first line as the password.
+- [x] Parse common metadata fields such as `username`, `login`, `email`, and
   `url`.
-- [ ] Detect `otpauth://` lines.
-- [ ] Preserve unrecognized lines for compatibility.
-- [ ] Add table-driven tests for common password-store entry shapes.
+- [x] Detect `otpauth://` lines.
+- [x] Preserve unrecognized lines for compatibility.
+- [x] Add table-driven tests for common password-store entry shapes.
 
 ### OTP
 

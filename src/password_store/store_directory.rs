@@ -68,6 +68,21 @@ pub enum PasswordStoreError {
     #[error("entry path is outside the password store: {0}")]
     EntryOutsideStore(PathBuf),
 
+    #[error("entry does not exist: {0}")]
+    EntryNotFound(String),
+
+    #[error("invalid entry name '{entry}': {reason}")]
+    InvalidEntryName { entry: String, reason: &'static str },
+
+    #[error("gpg executable was not found; install GnuPG 2.x or set PASSWORD_STORE_GPG")]
+    GpgNotFound,
+
+    #[error("gpg failed to decrypt entry: {0}")]
+    GpgDecryptFailed(String),
+
+    #[error("gpg output was not valid UTF-8: {0}")]
+    GpgOutputNotUtf8(#[from] std::string::FromUtf8Error),
+
     #[error("failed to access password store: {0}")]
     Io(#[from] std::io::Error),
 }

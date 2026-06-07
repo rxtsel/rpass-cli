@@ -139,3 +139,25 @@ fn reports_gpg_decrypt_failure() {
             "gpg failed to decrypt entry: gpg: decryption failed",
         ));
 }
+
+#[test]
+fn reports_passphrase_required_as_json() {
+    let store = password_store_with_entry("email/work.gpg");
+    let gpg = failing_gpg_script(store.path(), "gpg: cannot get input");
+
+    rpass()
+        .env("PASSWORD_STORE_GPG", gpg)
+        .args([
+            "--store-dir",
+            store.path().to_str().expect("store path"),
+            "show",
+            "email/work",
+            "--json",
+        ])
+        .assert()
+        .failure()
+        .stdout("")
+        .stderr(
+            "{\n  \"error\": {\n    \"code\": \"gpg_passphrase_required\",\n    \"message\": \"gpg requires a passphrase; use --passphrase to provide it\"\n  }\n}\n",
+        );
+}

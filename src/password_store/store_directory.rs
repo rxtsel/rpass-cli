@@ -81,6 +81,9 @@ pub enum PasswordStoreError {
     #[error("gpg executable was not found; install GnuPG 2.x or set PASSWORD_STORE_GPG")]
     GpgNotFound,
 
+    #[error("gpg requires a passphrase; use --passphrase to provide it")]
+    GpgPassphraseRequired,
+
     #[error("gpg failed to decrypt entry: {0}")]
     GpgDecryptFailed(String),
 
@@ -110,6 +113,7 @@ impl PasswordStoreError {
             Self::EntryNotFound(_) => "entry_not_found",
             Self::InvalidEntryName { .. } => "invalid_entry_name",
             Self::GpgNotFound => "gpg_not_found",
+            Self::GpgPassphraseRequired => "gpg_passphrase_required",
             Self::GpgDecryptFailed(_) => "gpg_decrypt_failed",
             Self::GpgOutputNotUtf8(_) => "gpg_output_not_utf8",
             Self::GpgVersionFailed(_) => "gpg_version_failed",

@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 This project uses [Conventional Commits](https://www.conventionalcommits.org/)
 and release automation with release-plz.
 
+## [0.1.1](https://github.com/rxtsel/rpass/compare/v0.1.0...v0.1.1) - 2026-06-07
+
+### Other
+
+- *(contributing)* document release workflow
+- *(release)* build cargo-dist assets
+
 ## [0.1.0] - 2026-06-07
 
 ### Added

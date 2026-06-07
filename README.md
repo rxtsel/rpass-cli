@@ -53,6 +53,14 @@ otpauth://totp/...
 2. `PASSWORD_STORE_DIR`
 3. `~/.password-store`
 
+## Current Scope
+
+`rpass` is currently a read-only backend. It reads existing password-store
+repositories and decrypts existing `.gpg` entries with external GnuPG.
+
+Write commands such as `insert`, `edit`, `generate`, `rm`, `mv`, and store
+initialization are intentionally not implemented yet.
+
 ## Commands
 
 ```bash
@@ -62,11 +70,56 @@ rpass search openai
 rpass search openai --json
 rpass show personal/openai.com
 rpass show personal/openai.com --json
+rpass show personal/openai.com --json --passphrase-stdin
 rpass otp personal/openai.com
 rpass otp personal/openai.com --json
+rpass otp personal/openai.com --json --passphrase-stdin
 rpass doctor
 rpass doctor --json
 ```
+
+`--passphrase-stdin` reads a single passphrase from standard input and passes it
+to GnuPG through loopback pinentry. It is intended for integrations that cannot
+show the native GPG pinentry UI.
+
+## JSON Contract
+
+Commands that accept `--json` follow this contract:
+
+- exit code `0`: stdout contains one complete JSON value and stderr is empty;
+- non-zero exit code: stderr contains one JSON error object and stdout is empty.
+
+Error responses use this shape:
+
+```json
+{
+  "error": {
+    "code": "gpg_decrypt_failed",
+    "message": "gpg failed to decrypt entry: ..."
+  }
+}
+```
+
+## Password-store Compatibility
+
+Supported behavior:
+
+- entries are addressed without the `.gpg` suffix;
+- decrypted first line is the password;
+- `name: value` metadata lines are preserved in JSON fields;
+- `otpauth://` lines are used for TOTP generation;
+- unknown lines are preserved as `extra_lines`;
+- store directory is resolved from `--store-dir`, `PASSWORD_STORE_DIR`, then
+  `~/.password-store`.
+
+Known differences from `pass`:
+
+- only read-only commands are supported;
+- shell completion, clipboard, QR code, Git, and edit workflows are not
+  implemented;
+- unsupported `pass` flags are rejected instead of ignored;
+- JSON output is an `rpass` integration contract, not part of the original
+  `pass` CLI.
 
 ## Diagnostics
 

@@ -83,6 +83,12 @@ pub enum PasswordStoreError {
     #[error("gpg output was not valid UTF-8: {0}")]
     GpgOutputNotUtf8(#[from] std::string::FromUtf8Error),
 
+    #[error("entry does not contain an otpauth URI")]
+    OtpNotFound,
+
+    #[error("entry contains an invalid otpauth URI: {0}")]
+    InvalidOtpUri(String),
+
     #[error("failed to access password store: {0}")]
     Io(#[from] std::io::Error),
 }

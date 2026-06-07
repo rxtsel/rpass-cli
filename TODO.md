@@ -48,8 +48,8 @@ repositories with structured JSON output.
 - [x] `rpass list --json`
 - [x] `rpass show <entry>`
 - [x] `rpass show <entry> --json`
-- [ ] `rpass otp <entry>`
-- [ ] `rpass otp <entry> --json`
+- [x] `rpass otp <entry>`
+- [x] `rpass otp <entry> --json`
 - [ ] `rpass search <query>`
 - [ ] `rpass search <query> --json`
 
@@ -86,10 +86,10 @@ repositories with structured JSON output.
 
 ### OTP
 
-- [ ] Parse TOTP data from `otpauth://` URIs.
-- [ ] Generate current TOTP codes.
-- [ ] Return remaining validity seconds in JSON output.
-- [ ] Add deterministic tests using fixed timestamps.
+- [x] Parse TOTP data from `otpauth://` URIs.
+- [x] Generate current TOTP codes.
+- [x] Return remaining validity seconds in JSON output.
+- [x] Add deterministic tests using fixed timestamps.
 
 ### JSON Contract
 

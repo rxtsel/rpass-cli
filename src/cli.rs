@@ -1,12 +1,13 @@
 mod tree_output;
 
 use std::path::PathBuf;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use clap::{ArgAction, Parser, Subcommand, ValueHint};
 use serde::Serialize;
 
 use crate::password_store::{
-    DecryptedEntry, GpgCommand, ListEntries, PasswordStore, ShowEntry, StoreDirectory,
+    DecryptedEntry, GpgCommand, ListEntries, OtpCode, PasswordStore, ShowEntry, StoreDirectory,
 };
 use tree_output::EntryTree;
 
@@ -43,6 +44,9 @@ enum Command {
 
     #[command(about = "Show a password store entry")]
     Show(ShowCommand),
+
+    #[command(about = "Generate an OTP code for a password store entry")]
+    Otp(OtpCommand),
 }
 
 #[derive(Debug, Parser)]
@@ -59,6 +63,14 @@ struct ShowCommand {
     json: bool,
 }
 
+#[derive(Debug, Parser)]
+struct OtpCommand {
+    entry: String,
+
+    #[arg(long)]
+    json: bool,
+}
+
 pub fn run() -> Result<(), CliError> {
     let cli = Cli::parse();
     let store_directory = StoreDirectory::resolve(cli.store_dir)?;
@@ -66,6 +78,7 @@ pub fn run() -> Result<(), CliError> {
     match cli.command {
         Command::List(command) => list_entries(command, store_directory),
         Command::Show(command) => show_entry(command, store_directory),
+        Command::Otp(command) => generate_otp(command, store_directory),
     }
 }
 
@@ -119,6 +132,40 @@ fn print_json_entry(entry_name: &str, entry: DecryptedEntry) -> Result<(), CliEr
     Ok(())
 }
 
+fn generate_otp(command: OtpCommand, store_directory: StoreDirectory) -> Result<(), CliError> {
+    let store = PasswordStore::open(store_directory)?;
+    let gpg = GpgCommand::from_environment();
+    let output = ShowEntry::new(&store, &gpg).execute(&command.entry)?;
+    let otp = OtpCode::generate_at(&output.parsed, current_unix_timestamp()?)?;
+
+    if command.json {
+        print_json_otp(&command.entry, &otp)?;
+    } else {
+        println!("{}", otp.code);
+    }
+
+    Ok(())
+}
+
+fn print_json_otp(entry_name: &str, otp: &OtpCode) -> Result<(), CliError> {
+    let json = serde_json::to_string_pretty(&OtpJson {
+        name: entry_name,
+        code: &otp.code,
+        remaining_seconds: otp.remaining_seconds,
+        period: otp.period,
+    })?;
+    println!("{json}");
+    Ok(())
+}
+
+fn current_unix_timestamp() -> Result<u64, CliError> {
+    let duration = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(CliError::SystemClock)?;
+
+    Ok(duration.as_secs())
+}
+
 #[derive(Debug, Serialize)]
 struct ShowEntryJson<'entry> {
     name: &'entry str,
@@ -128,6 +175,14 @@ struct ShowEntryJson<'entry> {
     extra_lines: &'entry [String],
 }
 
+#[derive(Debug, Serialize)]
+struct OtpJson<'entry> {
+    name: &'entry str,
+    code: &'entry str,
+    remaining_seconds: u64,
+    period: u64,
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum CliError {
     #[error(transparent)]
@@ -135,4 +190,7 @@ pub enum CliError {
 
     #[error("failed to serialize JSON output: {0}")]
     Json(#[from] serde_json::Error),
+
+    #[error("system clock is before the Unix epoch: {0}")]
+    SystemClock(#[from] std::time::SystemTimeError),
 }

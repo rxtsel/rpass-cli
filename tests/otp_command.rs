@@ -2,7 +2,7 @@ mod support;
 
 use predicates::prelude::*;
 
-use support::{password_store_with_entry, rpass, successful_gpg_script};
+use support::{passphrase_gpg_script, password_store_with_entry, rpass, successful_gpg_script};
 
 #[test]
 fn generates_otp_code_as_text() {
@@ -40,6 +40,31 @@ fn generates_otp_code_as_json() {
         .success()
         .stdout(predicate::str::contains("\"name\": \"email/work\""))
         .stdout(predicate::str::is_match(r#""code": "\d{6}""#).expect("regex"))
+        .stdout(predicate::str::contains("\"remaining_seconds\""))
+        .stdout(predicate::str::contains("\"period\": 30"));
+}
+
+#[test]
+fn generates_otp_code_as_json_with_passphrase_stdin() {
+    let store = password_store_with_entry("email/work.gpg");
+    let gpg = passphrase_gpg_script(store.path(), "correct horse", entry_with_otp_uri());
+
+    rpass()
+        .env("PASSWORD_STORE_GPG", gpg)
+        .write_stdin("correct horse\n")
+        .args([
+            "--store-dir",
+            store.path().to_str().expect("store path"),
+            "otp",
+            "--json",
+            "--passphrase-stdin",
+            "email/work",
+        ])
+        .assert()
+        .success()
+        .stderr("")
+        .stdout(predicate::str::contains("\"name\": \"email/work\""))
+        .stdout(predicate::str::is_match(r#"\"code\": \"\d{6}\""#).expect("regex"))
         .stdout(predicate::str::contains("\"remaining_seconds\""))
         .stdout(predicate::str::contains("\"period\": 30"));
 }

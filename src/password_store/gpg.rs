@@ -1,7 +1,8 @@
 use std::env;
 use std::ffi::OsString;
+use std::io::Write;
 use std::path::Path;
-use std::process::Command;
+use std::process::{Command, Stdio};
 
 use super::PasswordStoreError;
 
@@ -24,18 +25,63 @@ impl GpgCommand {
         }
     }
 
-    pub fn decrypt(&self, encrypted_file: &Path) -> Result<String, PasswordStoreError> {
-        let output = Command::new(&self.program)
-            .arg("--quiet")
-            .arg("--decrypt")
-            .arg(encrypted_file)
-            .output()
-            .map_err(map_gpg_spawn_error)?;
+    pub fn decrypt(
+        &self,
+        encrypted_file: &Path,
+        passphrase: Option<&str>,
+    ) -> Result<String, PasswordStoreError> {
+        let mut cmd = Command::new(&self.program);
+        cmd.arg("--quiet")
+            .arg("--batch")
+            .arg("--yes")
+            .arg("--no-tty")
+            .arg("--pinentry-mode=loopback")
+            .arg("--status-fd=2");
+
+        if passphrase.is_some() {
+            cmd.arg("--passphrase-fd=0")
+                .stdin(Stdio::piped())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped());
+        }
+
+        cmd.arg("--decrypt").arg(encrypted_file);
+
+        let output = if let Some(passphrase) = passphrase {
+            let mut child = cmd.spawn().map_err(map_gpg_spawn_error)?;
+            let stdin_error = match child.stdin.take() {
+                Some(mut stdin) => stdin
+                    .write_all(passphrase.as_bytes())
+                    .and_then(|_| stdin.write_all(b"\n"))
+                    .err(),
+                None => Some(std::io::Error::new(
+                    std::io::ErrorKind::BrokenPipe,
+                    "gpg stdin was unavailable",
+                )),
+            };
+            let output = child.wait_with_output().map_err(map_gpg_spawn_error)?;
+            if output.status.success()
+                && let Some(error) = stdin_error
+            {
+                return Err(PasswordStoreError::Io(error));
+            }
+            output
+        } else {
+            cmd.output().map_err(map_gpg_spawn_error)?
+        };
 
         if !output.status.success() {
+            if passphrase.is_none() && gpg_requires_passphrase(&output.stderr) {
+                return Err(PasswordStoreError::GpgPassphraseRequired);
+            }
+
             return Err(PasswordStoreError::GpgDecryptFailed(gpg_error_message(
                 &output.stderr,
             )));
+        }
+
+        if output.stdout.is_empty() {
+            return Err(PasswordStoreError::GpgEmptyOutput);
         }
 
         String::from_utf8(output.stdout).map_err(PasswordStoreError::GpgOutputNotUtf8)
@@ -113,6 +159,24 @@ fn gpg_error_message(stderr: &[u8]) -> String {
     }
 }
 
+fn gpg_requires_passphrase(stderr: &[u8]) -> bool {
+    let message = String::from_utf8_lossy(stderr).to_ascii_lowercase();
+
+    [
+        "[gnupg:] need_passphrase",
+        "[gnupg:] need_passphrase_sym",
+        "[gnupg:] missing_passphrase",
+        "no pinentry",
+        "pinentry",
+        "inappropriate ioctl",
+        "can't get input",
+        "cannot get input",
+        "problem with the agent",
+    ]
+    .iter()
+    .any(|needle| message.contains(needle))
+}
+
 fn first_line(output: &str) -> &str {
     output.lines().next().unwrap_or_default()
 }
@@ -121,7 +185,9 @@ fn first_line(output: &str) -> &str {
 mod tests {
     use std::ffi::OsString;
 
-    use super::{first_line, gpg_error_message, gpg_program_from_environment_value};
+    use super::{
+        first_line, gpg_error_message, gpg_program_from_environment_value, gpg_requires_passphrase,
+    };
 
     #[test]
     fn uses_fallback_message_for_empty_gpg_stderr() {
@@ -137,6 +203,24 @@ mod tests {
             gpg_error_message(b"gpg: decryption failed\n"),
             "gpg: decryption failed".to_string()
         );
+    }
+
+    #[test]
+    fn detects_passphrase_required_gpg_errors() {
+        assert!(gpg_requires_passphrase(
+            b"gpg: problem with the agent: Inappropriate ioctl for device"
+        ));
+        assert!(gpg_requires_passphrase(
+            b"gpg: Sorry, we are in batchmode - can't get input"
+        ));
+        assert!(gpg_requires_passphrase(b"gpg: No pinentry"));
+        assert!(gpg_requires_passphrase(
+            b"[GNUPG:] NEED_PASSPHRASE 0000000000000000 0000000000000000 1 0\ngpg: public key decryption failed: Inappropriate ioctl for device"
+        ));
+        assert!(!gpg_requires_passphrase(
+            b"gpg: public key decryption failed: No secret key\ngpg: decryption failed: No secret key"
+        ));
+        assert!(!gpg_requires_passphrase(b"gpg: decryption failed"));
     }
 
     #[test]

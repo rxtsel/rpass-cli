@@ -16,7 +16,11 @@ impl<'store, 'gpg> ShowEntry<'store, 'gpg> {
         Self { store, gpg }
     }
 
-    pub fn execute(&self, entry_name: &str) -> Result<ShowEntryOutput, PasswordStoreError> {
+    pub fn execute(
+        &self,
+        entry_name: &str,
+        passphrase: Option<&str>,
+    ) -> Result<ShowEntryOutput, PasswordStoreError> {
         let entry_name = EntryName::from_user_input(entry_name).map_err(|error| {
             PasswordStoreError::InvalidEntryName {
                 entry: entry_name.to_owned(),
@@ -29,7 +33,7 @@ impl<'store, 'gpg> ShowEntry<'store, 'gpg> {
             return Err(PasswordStoreError::EntryNotFound(entry_name.into_string()));
         }
 
-        let content = self.gpg.decrypt(&encrypted_file)?;
+        let content = self.gpg.decrypt(&encrypted_file, passphrase)?;
         let parsed = DecryptedEntry::parse(&content);
 
         Ok(ShowEntryOutput { content, parsed })
@@ -54,7 +58,7 @@ mod tests {
         let gpg = GpgCommand::new("missing-gpg");
 
         let error = ShowEntry::new(&store, &gpg)
-            .execute("../outside")
+            .execute("../outside", None)
             .unwrap_err();
 
         assert!(matches!(
@@ -69,7 +73,9 @@ mod tests {
         let store = PasswordStore::open(StoreDirectory::from_path(temp_dir.path())).expect("store");
         let gpg = GpgCommand::new("missing-gpg");
 
-        let error = ShowEntry::new(&store, &gpg).execute("missing").unwrap_err();
+        let error = ShowEntry::new(&store, &gpg)
+            .execute("missing", None)
+            .unwrap_err();
 
         assert!(matches!(error, PasswordStoreError::EntryNotFound(entry) if entry == "missing"));
     }
@@ -83,7 +89,7 @@ mod tests {
         let store = PasswordStore::open(StoreDirectory::from_path(temp_dir.path())).expect("store");
 
         let output = ShowEntry::new(&store, &GpgCommand::new(gpg))
-            .execute("email/work")
+            .execute("email/work", None)
             .expect("entry");
 
         assert_eq!(

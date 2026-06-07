@@ -1,5 +1,6 @@
 mod tree_output;
 
+use std::io::Read;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -66,6 +67,12 @@ struct ListCommand {
 struct ShowCommand {
     entry: String,
 
+    #[arg(long, conflicts_with = "passphrase_stdin")]
+    passphrase: Option<String>,
+
+    #[arg(long)]
+    passphrase_stdin: bool,
+
     #[arg(long)]
     json: bool,
 }
@@ -73,6 +80,12 @@ struct ShowCommand {
 #[derive(Debug, Parser)]
 struct OtpCommand {
     entry: String,
+
+    #[arg(long, conflicts_with = "passphrase_stdin")]
+    passphrase: Option<String>,
+
+    #[arg(long)]
+    passphrase_stdin: bool,
 
     #[arg(long)]
     json: bool,
@@ -169,7 +182,8 @@ fn search_entries(command: SearchCommand, store_directory: StoreDirectory) -> Re
 fn show_entry(command: ShowCommand, store_directory: StoreDirectory) -> Result<(), CliError> {
     let store = PasswordStore::open(store_directory)?;
     let gpg = GpgCommand::from_environment();
-    let output = ShowEntry::new(&store, &gpg).execute(&command.entry)?;
+    let passphrase = command_passphrase(command.passphrase, command.passphrase_stdin)?;
+    let output = ShowEntry::new(&store, &gpg).execute(&command.entry, passphrase.as_deref())?;
 
     if command.json {
         print_json_entry(&command.entry, output.parsed)?;
@@ -195,7 +209,8 @@ fn print_json_entry(entry_name: &str, entry: DecryptedEntry) -> Result<(), CliEr
 fn generate_otp(command: OtpCommand, store_directory: StoreDirectory) -> Result<(), CliError> {
     let store = PasswordStore::open(store_directory)?;
     let gpg = GpgCommand::from_environment();
-    let output = ShowEntry::new(&store, &gpg).execute(&command.entry)?;
+    let passphrase = command_passphrase(command.passphrase, command.passphrase_stdin)?;
+    let output = ShowEntry::new(&store, &gpg).execute(&command.entry, passphrase.as_deref())?;
     let otp = OtpCode::generate_at(&output.parsed, current_unix_timestamp()?)?;
 
     if command.json {
@@ -216,6 +231,21 @@ fn print_json_otp(entry_name: &str, otp: &OtpCode) -> Result<(), CliError> {
     })?;
     println!("{json}");
     Ok(())
+}
+
+fn command_passphrase(
+    passphrase: Option<String>,
+    passphrase_stdin: bool,
+) -> Result<Option<String>, CliError> {
+    if !passphrase_stdin {
+        return Ok(passphrase);
+    }
+
+    let mut input = String::new();
+    std::io::stdin()
+        .read_to_string(&mut input)
+        .map_err(CliError::ReadPassphrase)?;
+    Ok(Some(input.trim_end_matches(['\r', '\n']).to_owned()))
 }
 
 fn current_unix_timestamp() -> Result<u64, CliError> {
@@ -315,6 +345,9 @@ pub enum CliError {
     #[error("system clock is before the Unix epoch: {0}")]
     SystemClock(#[from] std::time::SystemTimeError),
 
+    #[error("failed to read passphrase from stdin: {0}")]
+    ReadPassphrase(std::io::Error),
+
     #[error("doctor checks failed")]
     DoctorFailed,
 
@@ -332,6 +365,7 @@ impl CliError {
             Self::PasswordStore(error) => error.code(),
             Self::Json(_) => "json_serialization_failed",
             Self::SystemClock(_) => "system_clock_before_unix_epoch",
+            Self::ReadPassphrase(_) => "read_passphrase_failed",
             Self::DoctorFailed => "doctor_checks_failed",
             Self::Reported => "reported",
         }

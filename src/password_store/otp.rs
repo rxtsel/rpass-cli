@@ -1,5 +1,6 @@
 use serde::Serialize;
 use totp_rs::TOTP;
+use url::Url;
 
 use super::{DecryptedEntry, PasswordStoreError};
 
@@ -16,8 +17,9 @@ impl OtpCode {
             .otp_uri
             .as_deref()
             .ok_or(PasswordStoreError::OtpNotFound)?;
-        let totp = TOTP::from_url_unchecked(otp_uri)
-            .map_err(|error| PasswordStoreError::InvalidOtpUri(error.to_string()))?;
+        let normalized_uri = normalize_otp_uri(otp_uri)?;
+        let totp = TOTP::from_url_unchecked(&normalized_uri)
+            .map_err(|_| PasswordStoreError::InvalidOtpUri)?;
 
         Ok(Self {
             code: totp.generate(timestamp),
@@ -37,9 +39,33 @@ fn remaining_seconds(timestamp: u64, period: u64) -> u64 {
     }
 }
 
+fn normalize_otp_uri(otp_uri: &str) -> Result<String, PasswordStoreError> {
+    let mut url = Url::parse(otp_uri).map_err(|_| PasswordStoreError::InvalidOtpUri)?;
+    let query_pairs = url
+        .query_pairs()
+        .map(|(key, value)| {
+            let normalized_value = normalize_query_value(&key, &value);
+
+            (key.into_owned(), normalized_value)
+        })
+        .collect::<Vec<_>>();
+
+    url.query_pairs_mut().clear().extend_pairs(query_pairs);
+
+    Ok(url.to_string())
+}
+
+fn normalize_query_value(key: &str, value: &str) -> String {
+    if key.eq_ignore_ascii_case("secret") {
+        value.to_ascii_uppercase()
+    } else {
+        value.to_owned()
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{DecryptedEntry, OtpCode, remaining_seconds};
+    use super::{DecryptedEntry, OtpCode, normalize_otp_uri, remaining_seconds};
 
     #[test]
     fn generates_deterministic_totp_code() {
@@ -65,5 +91,31 @@ otpauth://totp/GitHub:test?secret=KRSXG5CTMVRXEZLUKN2XAZLSKNSWG4TFOQ
     #[test]
     fn returns_full_period_at_step_boundary() {
         assert_eq!(remaining_seconds(60, 30), 30);
+    }
+
+    #[test]
+    fn normalizes_lowercase_secret() {
+        let entry = DecryptedEntry::parse(
+            "\
+secret
+otpauth://totp/Stripe:test?secret=eq2gkb3bljy7hansqf2kmqb7
+",
+        );
+
+        let code = OtpCode::generate_at(&entry, 1000).expect("otp");
+
+        assert_eq!(code.code.len(), 6);
+    }
+
+    #[test]
+    fn preserves_non_secret_query_parameters() {
+        let normalized = normalize_otp_uri(
+            "otpauth://totp/Stripe:test?secret=eq2gkb3bljy7hansqf2kmqb7&issuer=Stripe&period=60",
+        )
+        .expect("normalized uri");
+
+        assert!(normalized.contains("secret=EQ2GKB3BLJY7HANSQF2KMQB7"));
+        assert!(normalized.contains("issuer=Stripe"));
+        assert!(normalized.contains("period=60"));
     }
 }

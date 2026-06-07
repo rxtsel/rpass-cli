@@ -93,8 +93,8 @@ pub enum PasswordStoreError {
     #[error("entry does not contain an otpauth URI")]
     OtpNotFound,
 
-    #[error("entry contains an invalid otpauth URI: {0}")]
-    InvalidOtpUri(String),
+    #[error("entry contains an invalid otpauth URI")]
+    InvalidOtpUri,
 
     #[error("failed to access password store: {0}")]
     Io(#[from] std::io::Error),
@@ -114,7 +114,7 @@ impl PasswordStoreError {
             Self::GpgOutputNotUtf8(_) => "gpg_output_not_utf8",
             Self::GpgVersionFailed(_) => "gpg_version_failed",
             Self::OtpNotFound => "otp_not_found",
-            Self::InvalidOtpUri(_) => "invalid_otp_uri",
+            Self::InvalidOtpUri => "invalid_otp_uri",
             Self::Io(_) => "io_error",
         }
     }

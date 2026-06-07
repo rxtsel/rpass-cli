@@ -45,6 +45,30 @@ fn generates_otp_code_as_json() {
 }
 
 #[test]
+fn accepts_lowercase_otp_secret() {
+    let store = password_store_with_entry("finance/stripe.gpg");
+    let gpg = successful_gpg_script(
+        store.path(),
+        "\
+secret
+otpauth://totp/Stripe:test?secret=eq2gkb3bljy7hansqf2kmqb7
+",
+    );
+
+    rpass()
+        .env("PASSWORD_STORE_GPG", gpg)
+        .args([
+            "--store-dir",
+            store.path().to_str().expect("store path"),
+            "otp",
+            "finance/stripe",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::is_match(r"^\d{6}\n$").expect("regex"));
+}
+
+#[test]
 fn reports_entry_without_otp_uri() {
     let store = password_store_with_entry("email/work.gpg");
     let gpg = successful_gpg_script(store.path(), "secret\nusername: alice\n");
@@ -89,7 +113,14 @@ fn reports_entry_without_otp_uri_as_json() {
 #[test]
 fn reports_invalid_otp_uri() {
     let store = password_store_with_entry("email/work.gpg");
-    let gpg = successful_gpg_script(store.path(), "secret\notpauth://totp/example\n");
+    let leaked_secret = "not-valid-secret";
+    let gpg = successful_gpg_script(
+        store.path(),
+        "\
+secret
+otpauth://totp/example?secret=not-valid-secret
+",
+    );
 
     rpass()
         .env("PASSWORD_STORE_GPG", gpg)
@@ -103,7 +134,8 @@ fn reports_invalid_otp_uri() {
         .failure()
         .stderr(predicate::str::contains(
             "entry contains an invalid otpauth URI",
-        ));
+        ))
+        .stderr(predicate::str::contains(leaked_secret).not());
 }
 
 fn entry_with_otp_uri() -> &'static str {

@@ -126,8 +126,9 @@ Known differences from `pass`:
 Releases are automated with release-plz and Conventional Commits.
 
 On pushes to `main`, release-plz maintains a release pull request with version
-and changelog updates. Merging that release pull request creates the `vX.Y.Z`
-tag and GitHub Release. Publishing to crates.io is disabled for now.
+and changelog updates. Normal development pushes do not create releases.
+Merging the release pull request creates the `vX.Y.Z` tag and GitHub Release.
+Publishing to crates.io is disabled for now.
 
 For the current crate version, see `Cargo.toml`.
 

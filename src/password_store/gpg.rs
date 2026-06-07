@@ -39,24 +39,31 @@ impl GpgCommand {
             .arg("--status-fd=2");
 
         if passphrase.is_some() {
-            cmd.arg("--passphrase-fd=0").stdin(Stdio::piped());
+            cmd.arg("--passphrase-fd=0")
+                .stdin(Stdio::piped())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped());
         }
 
         cmd.arg("--decrypt").arg(encrypted_file);
 
         let output = if let Some(passphrase) = passphrase {
             let mut child = cmd.spawn().map_err(map_gpg_spawn_error)?;
-            let stdin_error = child.stdin.take().and_then(|mut stdin| {
-                stdin
+            let stdin_error = match child.stdin.take() {
+                Some(mut stdin) => stdin
                     .write_all(passphrase.as_bytes())
                     .and_then(|_| stdin.write_all(b"\n"))
-                    .err()
-            });
+                    .err(),
+                None => Some(std::io::Error::new(
+                    std::io::ErrorKind::BrokenPipe,
+                    "gpg stdin was unavailable",
+                )),
+            };
             let output = child.wait_with_output().map_err(map_gpg_spawn_error)?;
-            if output.status.success() {
-                if let Some(error) = stdin_error {
-                    return Err(PasswordStoreError::Io(error));
-                }
+            if output.status.success()
+                && let Some(error) = stdin_error
+            {
+                return Err(PasswordStoreError::Io(error));
             }
             output
         } else {
@@ -71,6 +78,10 @@ impl GpgCommand {
             return Err(PasswordStoreError::GpgDecryptFailed(gpg_error_message(
                 &output.stderr,
             )));
+        }
+
+        if output.stdout.is_empty() {
+            return Err(PasswordStoreError::GpgEmptyOutput);
         }
 
         String::from_utf8(output.stdout).map_err(PasswordStoreError::GpgOutputNotUtf8)

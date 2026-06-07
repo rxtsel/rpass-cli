@@ -55,6 +55,68 @@ pub fn successful_gpg_script(directory: &Path, output: &str) -> PathBuf {
 
 #[cfg(windows)]
 #[allow(dead_code)]
+pub fn passphrase_gpg_script(directory: &Path, expected_passphrase: &str, output: &str) -> PathBuf {
+    let script = directory.join("gpg-passphrase.cmd");
+    let expected_file = directory.join("gpg-passphrase.txt");
+    let output_file = directory.join("gpg-passphrase-output.txt");
+
+    fs::write(&expected_file, expected_passphrase).expect("passphrase file");
+    fs::write(&output_file, output).expect("output file");
+    fs::write(
+        &script,
+        format!(
+            "@echo off\r\nset /p passphrase=\r\nset /p expected=<\"{}\"\r\nif \"%passphrase%\"==\"%expected%\" (\r\n  echo [GNUPG:] DECRYPTION_OKAY 1>&2\r\n  type \"{}\"\r\n  exit /b 0\r\n)\r\necho gpg: decryption failed: Bad passphrase 1>&2\r\nexit /b 2\r\n",
+            expected_file.display(),
+            output_file.display()
+        ),
+    )
+    .expect("script");
+    script
+}
+
+#[cfg(not(windows))]
+#[allow(dead_code)]
+pub fn passphrase_gpg_script(directory: &Path, expected_passphrase: &str, output: &str) -> PathBuf {
+    let script = directory.join("gpg-passphrase");
+    let expected_file = directory.join("gpg-passphrase.txt");
+    let output_file = directory.join("gpg-passphrase-output.txt");
+
+    fs::write(&expected_file, expected_passphrase).expect("passphrase file");
+    fs::write(&output_file, output).expect("output file");
+    fs::write(
+        &script,
+        format!(
+            "#!/bin/sh\nIFS= read -r passphrase\nexpected=$(cat '{}')\nif [ \"$passphrase\" = \"$expected\" ]; then\n  printf '[GNUPG:] DECRYPTION_OKAY\\n' >&2\n  cat '{}'\n  exit 0\nfi\nprintf 'gpg: decryption failed: Bad passphrase\\n' >&2\nexit 2\n",
+            expected_file.display(),
+            output_file.display()
+        ),
+    )
+    .expect("script");
+    make_executable(&script);
+    script
+}
+
+#[cfg(windows)]
+#[allow(dead_code)]
+pub fn empty_success_gpg_script(directory: &Path) -> PathBuf {
+    let script = directory.join("gpg-empty.cmd");
+
+    fs::write(&script, "@echo off\r\nexit /b 0\r\n").expect("script");
+    script
+}
+
+#[cfg(not(windows))]
+#[allow(dead_code)]
+pub fn empty_success_gpg_script(directory: &Path) -> PathBuf {
+    let script = directory.join("gpg-empty");
+
+    fs::write(&script, "#!/bin/sh\nexit 0\n").expect("script");
+    make_executable(&script);
+    script
+}
+
+#[cfg(windows)]
+#[allow(dead_code)]
 pub fn failing_gpg_script(directory: &Path, message: &str) -> PathBuf {
     let script = directory.join("gpg-fail.cmd");
 

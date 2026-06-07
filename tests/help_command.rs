@@ -12,14 +12,13 @@ fn prints_concise_root_help() {
         .stdout(predicate::str::contains(
             "--store-dir <PATH>  Use a store directory instead of PASSWORD_STORE_DIR",
         ))
+        .stdout(predicate::str::contains("List password store entries"))
+        .stdout(predicate::str::contains("Show a password store entry"))
         .stdout(predicate::str::contains(
-            "list  List password store entries",
+            "Generate an OTP code for a password store entry",
         ))
         .stdout(predicate::str::contains(
-            "show  Show a password store entry",
-        ))
-        .stdout(predicate::str::contains(
-            "otp   Generate an OTP code for a password store entry",
+            "search  Search password store entries",
         ))
         .stdout(predicate::str::contains("help  Print").not());
 }

@@ -7,7 +7,8 @@ use clap::{ArgAction, Parser, Subcommand, ValueHint};
 use serde::Serialize;
 
 use crate::password_store::{
-    DecryptedEntry, GpgCommand, ListEntries, OtpCode, PasswordStore, ShowEntry, StoreDirectory,
+    DecryptedEntry, GpgCommand, ListEntries, OtpCode, PasswordStore, SearchEntries, ShowEntry,
+    StoreDirectory,
 };
 use tree_output::EntryTree;
 
@@ -47,6 +48,9 @@ enum Command {
 
     #[command(about = "Generate an OTP code for a password store entry")]
     Otp(OtpCommand),
+
+    #[command(about = "Search password store entries")]
+    Search(SearchCommand),
 }
 
 #[derive(Debug, Parser)]
@@ -71,6 +75,14 @@ struct OtpCommand {
     json: bool,
 }
 
+#[derive(Debug, Parser)]
+struct SearchCommand {
+    query: String,
+
+    #[arg(long)]
+    json: bool,
+}
+
 pub fn run() -> Result<(), CliError> {
     let cli = Cli::parse();
     let store_directory = StoreDirectory::resolve(cli.store_dir)?;
@@ -79,6 +91,7 @@ pub fn run() -> Result<(), CliError> {
         Command::List(command) => list_entries(command, store_directory),
         Command::Show(command) => show_entry(command, store_directory),
         Command::Otp(command) => generate_otp(command, store_directory),
+        Command::Search(command) => search_entries(command, store_directory),
     }
 }
 
@@ -103,6 +116,19 @@ fn print_text_entries(entries: &[String]) {
 fn print_json_entries(entries: &[String]) -> Result<(), CliError> {
     let json = serde_json::to_string_pretty(entries)?;
     println!("{json}");
+    Ok(())
+}
+
+fn search_entries(command: SearchCommand, store_directory: StoreDirectory) -> Result<(), CliError> {
+    let store = PasswordStore::open(store_directory)?;
+    let entries = SearchEntries::new(&store).execute(&command.query)?;
+
+    if command.json {
+        print_json_entries(&entries)?;
+    } else {
+        print_text_entries(&entries);
+    }
+
     Ok(())
 }
 

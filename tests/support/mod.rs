@@ -4,10 +4,12 @@ use std::path::{Path, PathBuf};
 use assert_cmd::Command;
 use tempfile::TempDir;
 
+#[allow(dead_code)]
 pub fn rpass() -> Command {
     Command::cargo_bin("rpass").expect("rpass binary")
 }
 
+#[allow(dead_code)]
 pub fn password_store_with_entry(entry: &str) -> TempDir {
     let store = TempDir::new().expect("temp dir");
     create_file(store.path().join(entry));
@@ -19,6 +21,7 @@ pub fn missing_executable_path(directory: &Path) -> PathBuf {
     directory.join("missing-gpg")
 }
 
+#[allow(dead_code)]
 fn create_file(path: impl AsRef<Path>) {
     let path = path.as_ref();
     fs::create_dir_all(path.parent().expect("parent")).expect("parent dir");
@@ -26,6 +29,7 @@ fn create_file(path: impl AsRef<Path>) {
 }
 
 #[cfg(windows)]
+#[allow(dead_code)]
 pub fn successful_gpg_script(directory: &Path, output: &str) -> PathBuf {
     let script = directory.join("gpg.cmd");
     let output_file = directory.join("gpg-output.txt");
@@ -40,6 +44,7 @@ pub fn successful_gpg_script(directory: &Path, output: &str) -> PathBuf {
 }
 
 #[cfg(not(windows))]
+#[allow(dead_code)]
 pub fn successful_gpg_script(directory: &Path, output: &str) -> PathBuf {
     let script = directory.join("gpg");
 

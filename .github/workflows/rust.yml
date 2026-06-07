@@ -1,0 +1,33 @@
+name: rust
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    name: ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+
+      - name: install rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: check formatting
+        run: cargo fmt --check
+
+      - name: run clippy
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: run tests
+        run: cargo test

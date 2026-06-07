@@ -143,7 +143,7 @@ Goal: earn stronger compatibility claims through automated evidence.
 - [ ] Build a fixture suite from real-world password-store layouts.
 - [ ] Test behavior against the original `pass` where practical.
 - [x] Document known differences from `pass`.
-- [ ] Add cross-platform CI for Windows, macOS, and Linux.
+- [x] Add cross-platform CI for Windows, macOS, and Linux.
 - [ ] Decide which `pass` CLI flags are intentionally unsupported.
 
 ## Near-Term Technical Notes

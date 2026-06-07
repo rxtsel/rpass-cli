@@ -1,6 +1,6 @@
 mod tree_output;
 
-use std::io::Read;
+use std::io::{IsTerminal, Read};
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -222,7 +222,7 @@ fn print_json_entry(entry_name: &str, entry: DecryptedEntry) -> Result<(), CliEr
 fn insert_entry(command: InsertCommand, store_directory: StoreDirectory) -> Result<(), CliError> {
     let store = PasswordStore::open(store_directory)?;
     let gpg = GpgCommand::from_environment();
-    let content = command_stdin()?;
+    let content = command_entry_content()?;
 
     InsertEntry::new(&store, &gpg).execute(&command.entry, &content)?;
 
@@ -264,6 +264,16 @@ fn print_json_otp(entry_name: &str, otp: &OtpCode) -> Result<(), CliError> {
     })?;
     println!("{json}");
     Ok(())
+}
+
+fn command_entry_content() -> Result<String, CliError> {
+    if std::io::stdin().is_terminal() {
+        let password = rpassword::prompt_password("Enter password: ")
+            .map_err(CliError::ReadTerminalPassword)?;
+        return Ok(format!("{password}\n"));
+    }
+
+    command_stdin()
 }
 
 fn command_stdin() -> Result<String, CliError> {
@@ -394,6 +404,9 @@ pub enum CliError {
     #[error("failed to read stdin: {0}")]
     ReadStdin(std::io::Error),
 
+    #[error("failed to read password from terminal: {0}")]
+    ReadTerminalPassword(std::io::Error),
+
     #[error("failed to read passphrase from stdin: {0}")]
     ReadPassphrase(std::io::Error),
 
@@ -415,6 +428,7 @@ impl CliError {
             Self::Json(_) => "json_serialization_failed",
             Self::SystemClock(_) => "system_clock_before_unix_epoch",
             Self::ReadStdin(_) => "read_stdin_failed",
+            Self::ReadTerminalPassword(_) => "read_terminal_password_failed",
             Self::ReadPassphrase(_) => "read_passphrase_failed",
             Self::DoctorFailed => "doctor_checks_failed",
             Self::Reported => "reported",

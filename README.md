@@ -121,6 +121,16 @@ Known differences from `pass`:
 - JSON output is an `rpass` integration contract, not part of the original
   `pass` CLI.
 
+## Releases
+
+Releases are automated with release-plz and Conventional Commits.
+
+On pushes to `main`, release-plz maintains a release pull request with version
+and changelog updates. Merging that release pull request creates the `vX.Y.Z`
+tag and GitHub Release. Publishing to crates.io is disabled for now.
+
+For the current crate version, see `Cargo.toml`.
+
 ## Diagnostics
 
 Run:

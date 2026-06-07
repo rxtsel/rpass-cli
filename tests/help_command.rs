@@ -10,7 +10,7 @@ fn prints_concise_root_help() {
         .success()
         .stdout(predicate::str::contains("Usage: rpass [OPTIONS] <COMMAND>"))
         .stdout(predicate::str::contains(
-            "--store-dir <PATH>  Use a password store directory",
+            "--store-dir <PATH>  Use a store directory instead of PASSWORD_STORE_DIR",
         ))
         .stdout(predicate::str::contains(
             "list  List password store entries",

@@ -2,7 +2,7 @@ mod tree_output;
 
 use std::path::PathBuf;
 
-use clap::{ArgAction, Parser, Subcommand};
+use clap::{ArgAction, Parser, Subcommand, ValueHint};
 
 use crate::password_store::{ListEntries, PasswordStore, StoreDirectory};
 use tree_output::EntryTree;
@@ -24,7 +24,8 @@ struct Cli {
         long,
         global = true,
         value_name = "PATH",
-        help = "Use a password store directory instead of the discovered default"
+        value_hint = ValueHint::DirPath,
+        help = "Use a store directory instead of PASSWORD_STORE_DIR or ~/.password-store"
     )]
     store_dir: Option<PathBuf>,
 

@@ -1,4 +1,5 @@
 mod decrypted_entry;
+mod doctor;
 mod entry_name;
 mod gpg;
 mod list_entries;
@@ -8,6 +9,7 @@ mod show_entry;
 mod store_directory;
 
 pub use decrypted_entry::{DecryptedEntry, EntryField};
+pub use doctor::DoctorReport;
 pub use entry_name::EntryName;
 pub use gpg::GpgCommand;
 pub use list_entries::ListEntries;

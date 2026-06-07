@@ -20,5 +20,8 @@ fn prints_concise_root_help() {
         .stdout(predicate::str::contains(
             "search  Search password store entries",
         ))
+        .stdout(predicate::str::contains(
+            "doctor  Check the local rpass environment",
+        ))
         .stdout(predicate::str::contains("help  Print").not());
 }

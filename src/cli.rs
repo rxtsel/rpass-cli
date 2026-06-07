@@ -7,8 +7,8 @@ use clap::{ArgAction, Parser, Subcommand, ValueHint};
 use serde::Serialize;
 
 use crate::password_store::{
-    DecryptedEntry, GpgCommand, ListEntries, OtpCode, PasswordStore, SearchEntries, ShowEntry,
-    StoreDirectory,
+    DecryptedEntry, DoctorReport, GpgCommand, ListEntries, OtpCode, PasswordStore, SearchEntries,
+    ShowEntry, StoreDirectory,
 };
 use tree_output::EntryTree;
 
@@ -51,6 +51,9 @@ enum Command {
 
     #[command(about = "Search password store entries")]
     Search(SearchCommand),
+
+    #[command(about = "Check the local rpass environment")]
+    Doctor(DoctorCommand),
 }
 
 #[derive(Debug, Parser)]
@@ -83,6 +86,12 @@ struct SearchCommand {
     json: bool,
 }
 
+#[derive(Debug, Parser)]
+struct DoctorCommand {
+    #[arg(long)]
+    json: bool,
+}
+
 pub fn run() -> Result<(), CliError> {
     let cli = Cli::parse();
     let store_directory = StoreDirectory::resolve(cli.store_dir)?;
@@ -92,6 +101,7 @@ pub fn run() -> Result<(), CliError> {
         Command::Show(command) => show_entry(command, store_directory),
         Command::Otp(command) => generate_otp(command, store_directory),
         Command::Search(command) => search_entries(command, store_directory),
+        Command::Doctor(command) => run_doctor(command, store_directory),
     }
 }
 
@@ -192,6 +202,45 @@ fn current_unix_timestamp() -> Result<u64, CliError> {
     Ok(duration.as_secs())
 }
 
+fn run_doctor(command: DoctorCommand, store_directory: StoreDirectory) -> Result<(), CliError> {
+    let gpg = GpgCommand::from_environment();
+    let report = DoctorReport::run(&store_directory, &gpg);
+
+    if command.json {
+        print_json_doctor(&report)?;
+    } else {
+        print_text_doctor(&report);
+    }
+
+    if report.ok {
+        Ok(())
+    } else {
+        Err(CliError::DoctorFailed)
+    }
+}
+
+fn print_text_doctor(report: &DoctorReport) {
+    println!("rpass doctor");
+    println!("store dir: {}", report.store_dir);
+
+    for check in &report.checks {
+        let status = if check.ok { "ok" } else { "fail" };
+        println!("[{status}] {}: {}", check.name, check.message);
+    }
+
+    if report.ok {
+        println!("rpass is ready");
+    } else {
+        println!("rpass needs attention");
+    }
+}
+
+fn print_json_doctor(report: &DoctorReport) -> Result<(), CliError> {
+    let json = serde_json::to_string_pretty(report)?;
+    println!("{json}");
+    Ok(())
+}
+
 #[derive(Debug, Serialize)]
 struct ShowEntryJson<'entry> {
     name: &'entry str,
@@ -219,4 +268,7 @@ pub enum CliError {
 
     #[error("system clock is before the Unix epoch: {0}")]
     SystemClock(#[from] std::time::SystemTimeError),
+
+    #[error("doctor checks failed")]
+    DoctorFailed,
 }

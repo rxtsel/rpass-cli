@@ -24,6 +24,10 @@ impl StoreDirectory {
         }
     }
 
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
+
     fn into_path_buf(self) -> PathBuf {
         self.path
     }
@@ -82,6 +86,9 @@ pub enum PasswordStoreError {
 
     #[error("gpg output was not valid UTF-8: {0}")]
     GpgOutputNotUtf8(#[from] std::string::FromUtf8Error),
+
+    #[error("gpg failed to report its version: {0}")]
+    GpgVersionFailed(String),
 
     #[error("entry does not contain an otpauth URI")]
     OtpNotFound,

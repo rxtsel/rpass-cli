@@ -40,6 +40,27 @@ impl GpgCommand {
 
         String::from_utf8(output.stdout).map_err(PasswordStoreError::GpgOutputNotUtf8)
     }
+
+    pub fn program_display(&self) -> String {
+        self.program.to_string_lossy().into_owned()
+    }
+
+    pub fn version(&self) -> Result<String, PasswordStoreError> {
+        let output = Command::new(&self.program)
+            .arg("--version")
+            .output()
+            .map_err(map_gpg_spawn_error)?;
+
+        if !output.status.success() {
+            return Err(PasswordStoreError::GpgVersionFailed(gpg_error_message(
+                &output.stderr,
+            )));
+        }
+
+        let stdout =
+            String::from_utf8(output.stdout).map_err(PasswordStoreError::GpgOutputNotUtf8)?;
+        Ok(first_line(&stdout).to_owned())
+    }
 }
 
 fn gpg_program_from_environment() -> Option<OsString> {
@@ -92,11 +113,15 @@ fn gpg_error_message(stderr: &[u8]) -> String {
     }
 }
 
+fn first_line(output: &str) -> &str {
+    output.lines().next().unwrap_or_default()
+}
+
 #[cfg(test)]
 mod tests {
     use std::ffi::OsString;
 
-    use super::{gpg_error_message, gpg_program_from_environment_value};
+    use super::{first_line, gpg_error_message, gpg_program_from_environment_value};
 
     #[test]
     fn uses_fallback_message_for_empty_gpg_stderr() {
@@ -126,5 +151,13 @@ mod tests {
         let program = gpg_program_from_environment_value(Some(OsString::from("custom-gpg")));
 
         assert_eq!(program, Some(OsString::from("custom-gpg")));
+    }
+
+    #[test]
+    fn extracts_first_version_line() {
+        assert_eq!(
+            first_line("gpg (GnuPG) 2.5.18\nlibgcrypt 1.11.0"),
+            "gpg (GnuPG) 2.5.18"
+        );
     }
 }

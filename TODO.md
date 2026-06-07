@@ -52,6 +52,8 @@ repositories with structured JSON output.
 - [x] `rpass otp <entry> --json`
 - [x] `rpass search <query>`
 - [x] `rpass search <query> --json`
+- [x] `rpass doctor`
+- [x] `rpass doctor --json`
 
 ### Store Discovery
 

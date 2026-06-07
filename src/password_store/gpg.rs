@@ -2,7 +2,7 @@ use std::env;
 use std::ffi::OsString;
 use std::io::Write;
 use std::path::Path;
-use std::process::{Command, Stdio};
+use std::process::{ChildStdin, Command, Output, Stdio};
 
 use super::PasswordStoreError;
 
@@ -30,42 +30,16 @@ impl GpgCommand {
         encrypted_file: &Path,
         passphrase: Option<&str>,
     ) -> Result<String, PasswordStoreError> {
-        let mut cmd = Command::new(&self.program);
-        cmd.arg("--quiet")
-            .arg("--batch")
-            .arg("--yes")
-            .arg("--no-tty")
-            .arg("--pinentry-mode=loopback")
-            .arg("--status-fd=2");
+        let mut cmd = self.decrypt_command();
 
         if passphrase.is_some() {
-            cmd.arg("--passphrase-fd=0")
-                .stdin(Stdio::piped())
-                .stdout(Stdio::piped())
-                .stderr(Stdio::piped());
+            configure_passphrase_input(&mut cmd);
         }
 
         cmd.arg("--decrypt").arg(encrypted_file);
 
         let output = if let Some(passphrase) = passphrase {
-            let mut child = cmd.spawn().map_err(map_gpg_spawn_error)?;
-            let stdin_error = match child.stdin.take() {
-                Some(mut stdin) => stdin
-                    .write_all(passphrase.as_bytes())
-                    .and_then(|_| stdin.write_all(b"\n"))
-                    .err(),
-                None => Some(std::io::Error::new(
-                    std::io::ErrorKind::BrokenPipe,
-                    "gpg stdin was unavailable",
-                )),
-            };
-            let output = child.wait_with_output().map_err(map_gpg_spawn_error)?;
-            if output.status.success()
-                && let Some(error) = stdin_error
-            {
-                return Err(PasswordStoreError::Io(error));
-            }
-            output
+            run_with_passphrase(&mut cmd, passphrase)?
         } else {
             cmd.output().map_err(map_gpg_spawn_error)?
         };
@@ -87,6 +61,17 @@ impl GpgCommand {
         String::from_utf8(output.stdout).map_err(PasswordStoreError::GpgOutputNotUtf8)
     }
 
+    fn decrypt_command(&self) -> Command {
+        let mut cmd = Command::new(&self.program);
+        cmd.arg("--quiet")
+            .arg("--batch")
+            .arg("--yes")
+            .arg("--no-tty")
+            .arg("--pinentry-mode=loopback")
+            .arg("--status-fd=2");
+        cmd
+    }
+
     pub fn program_display(&self) -> String {
         self.program.to_string_lossy().into_owned()
     }
@@ -106,6 +91,40 @@ impl GpgCommand {
         let stdout =
             String::from_utf8(output.stdout).map_err(PasswordStoreError::GpgOutputNotUtf8)?;
         Ok(first_line(&stdout).to_owned())
+    }
+}
+
+fn configure_passphrase_input(cmd: &mut Command) {
+    cmd.arg("--passphrase-fd=0")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+}
+
+fn run_with_passphrase(cmd: &mut Command, passphrase: &str) -> Result<Output, PasswordStoreError> {
+    let mut child = cmd.spawn().map_err(map_gpg_spawn_error)?;
+    let stdin_error = write_passphrase(child.stdin.take(), passphrase);
+    let output = child.wait_with_output().map_err(map_gpg_spawn_error)?;
+
+    if output.status.success()
+        && let Some(error) = stdin_error
+    {
+        return Err(PasswordStoreError::Io(error));
+    }
+
+    Ok(output)
+}
+
+fn write_passphrase(stdin: Option<ChildStdin>, passphrase: &str) -> Option<std::io::Error> {
+    match stdin {
+        Some(mut stdin) => stdin
+            .write_all(passphrase.as_bytes())
+            .and_then(|_| stdin.write_all(b"\n"))
+            .err(),
+        None => Some(std::io::Error::new(
+            std::io::ErrorKind::BrokenPipe,
+            "gpg stdin was unavailable",
+        )),
     }
 }
 

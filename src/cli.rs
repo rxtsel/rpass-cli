@@ -231,7 +231,7 @@ fn print_json_entry(entry_name: &str, entry: DecryptedEntry) -> Result<(), CliEr
 fn insert_entry(command: InsertCommand, store_directory: StoreDirectory) -> Result<(), CliError> {
     let store = PasswordStore::open(store_directory)?;
     let gpg = GpgCommand::from_environment();
-    let content = command_entry_content(command.multiline, command.echo)?;
+    let content = command_entry_content(&command.entry, command.multiline, command.echo)?;
 
     InsertEntry::new(&store, &gpg).execute(&command.entry, &content, command.force)?;
 
@@ -275,8 +275,16 @@ fn print_json_otp(entry_name: &str, otp: &OtpCode) -> Result<(), CliError> {
     Ok(())
 }
 
-fn command_entry_content(multiline: bool, echo: bool) -> Result<String, CliError> {
+fn command_entry_content(
+    entry_name: &str,
+    multiline: bool,
+    echo: bool,
+) -> Result<String, CliError> {
     if multiline {
+        if std::io::stdin().is_terminal() {
+            print_multiline_help(entry_name);
+        }
+
         return command_stdin();
     }
 
@@ -302,6 +310,22 @@ fn command_entry_content(multiline: bool, echo: bool) -> Result<String, CliError
     }
 
     command_stdin_first_line()
+}
+
+fn print_multiline_help(entry_name: &str) {
+    eprintln!("Enter multiline secret for {entry_name}.");
+    eprintln!("First line is password. Additional lines are metadata.");
+    eprintln!("{}", multiline_end_hint());
+}
+
+#[cfg(windows)]
+fn multiline_end_hint() -> &'static str {
+    "Press Ctrl-Z then Enter when finished."
+}
+
+#[cfg(not(windows))]
+fn multiline_end_hint() -> &'static str {
+    "Press Ctrl-D when finished."
 }
 
 fn prompt_line(prompt: &str) -> Result<String, CliError> {

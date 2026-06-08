@@ -84,8 +84,9 @@ rpass doctor --json
 ```
 
 `insert` prompts for a password and confirmation when run in an interactive
-terminal. Use `--echo` to show input, `--multiline` to read the full entry from
-stdin until EOF, and `--force` to overwrite an existing entry.
+terminal. Use `--echo` to show input, `--multiline` to read the full entry until
+EOF, and `--force` to overwrite an existing entry. In multiline mode, the first
+line is the password and additional lines are metadata.
 
 `--passphrase-stdin` reads a single passphrase from standard input and passes it
 to GnuPG through loopback pinentry. It is intended for integrations that cannot

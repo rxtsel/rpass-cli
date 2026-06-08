@@ -73,7 +73,9 @@ rpass show personal/openai.com
 rpass show personal/openai.com --json
 rpass show personal/openai.com --json --passphrase-stdin
 rpass insert personal/openai.com
-printf 'password\nusername: alice\n' | rpass insert personal/openai.com
+rpass insert --echo personal/openai.com
+printf 'password\nusername: alice\n' | rpass insert --multiline personal/openai.com
+rpass insert --force personal/openai.com
 rpass otp personal/openai.com
 rpass otp personal/openai.com --json
 rpass otp personal/openai.com --json --passphrase-stdin
@@ -81,8 +83,9 @@ rpass doctor
 rpass doctor --json
 ```
 
-`insert` prompts for a password when run in an interactive terminal. When stdin
-is piped, it reads the full entry content from stdin.
+`insert` prompts for a password and confirmation when run in an interactive
+terminal. Use `--echo` to show input, `--multiline` to read the full entry from
+stdin until EOF, and `--force` to overwrite an existing entry.
 
 `--passphrase-stdin` reads a single passphrase from standard input and passes it
 to GnuPG through loopback pinentry. It is intended for integrations that cannot

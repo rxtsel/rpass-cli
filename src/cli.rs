@@ -1,6 +1,6 @@
 mod tree_output;
 
-use std::io::{IsTerminal, Read};
+use std::io::{BufRead, IsTerminal, Read, Write};
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -83,6 +83,15 @@ struct ShowCommand {
 #[derive(Debug, Parser)]
 struct InsertCommand {
     entry: String,
+
+    #[arg(short = 'e', long)]
+    echo: bool,
+
+    #[arg(short = 'm', long)]
+    multiline: bool,
+
+    #[arg(short = 'f', long)]
+    force: bool,
 
     #[arg(long)]
     json: bool,
@@ -222,9 +231,9 @@ fn print_json_entry(entry_name: &str, entry: DecryptedEntry) -> Result<(), CliEr
 fn insert_entry(command: InsertCommand, store_directory: StoreDirectory) -> Result<(), CliError> {
     let store = PasswordStore::open(store_directory)?;
     let gpg = GpgCommand::from_environment();
-    let content = command_entry_content()?;
+    let content = command_entry_content(command.multiline, command.echo)?;
 
-    InsertEntry::new(&store, &gpg).execute(&command.entry, &content)?;
+    InsertEntry::new(&store, &gpg).execute(&command.entry, &content, command.force)?;
 
     if command.json {
         print_json_insert(&command.entry)?;
@@ -266,12 +275,24 @@ fn print_json_otp(entry_name: &str, otp: &OtpCode) -> Result<(), CliError> {
     Ok(())
 }
 
-fn command_entry_content() -> Result<String, CliError> {
+fn command_entry_content(multiline: bool, echo: bool) -> Result<String, CliError> {
+    if multiline {
+        return command_stdin();
+    }
+
     if std::io::stdin().is_terminal() {
-        let password = rpassword::prompt_password("Enter password: ")
-            .map_err(CliError::ReadTerminalPassword)?;
-        let confirmation = rpassword::prompt_password("Retype password: ")
-            .map_err(CliError::ReadTerminalPassword)?;
+        let password = if echo {
+            prompt_line("Enter password: ")?
+        } else {
+            rpassword::prompt_password("Enter password: ")
+                .map_err(CliError::ReadTerminalPassword)?
+        };
+        let confirmation = if echo {
+            prompt_line("Retype password: ")?
+        } else {
+            rpassword::prompt_password("Retype password: ")
+                .map_err(CliError::ReadTerminalPassword)?
+        };
 
         if password != confirmation {
             return Err(CliError::PasswordConfirmationMismatch);
@@ -280,7 +301,28 @@ fn command_entry_content() -> Result<String, CliError> {
         return Ok(format!("{password}\n"));
     }
 
-    command_stdin()
+    command_stdin_first_line()
+}
+
+fn prompt_line(prompt: &str) -> Result<String, CliError> {
+    eprint!("{prompt}");
+    std::io::stderr().flush().map_err(CliError::ReadStdin)?;
+
+    let mut input = String::new();
+    std::io::stdin()
+        .lock()
+        .read_line(&mut input)
+        .map_err(CliError::ReadStdin)?;
+    Ok(input.trim_end_matches(['\r', '\n']).to_owned())
+}
+
+fn command_stdin_first_line() -> Result<String, CliError> {
+    let mut input = String::new();
+    std::io::stdin()
+        .lock()
+        .read_line(&mut input)
+        .map_err(CliError::ReadStdin)?;
+    Ok(input)
 }
 
 fn command_stdin() -> Result<String, CliError> {

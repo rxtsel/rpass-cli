@@ -72,6 +72,9 @@ pub enum PasswordStoreError {
     #[error("entry path is outside the password store: {0}")]
     EntryOutsideStore(PathBuf),
 
+    #[error("entry already exists: {0}")]
+    EntryAlreadyExists(String),
+
     #[error("entry does not exist: {0}")]
     EntryNotFound(String),
 
@@ -119,6 +122,7 @@ impl PasswordStoreError {
             Self::StoreIsNotDirectory(_) => "store_is_not_directory",
             Self::HomeDirectoryUnavailable => "home_directory_unavailable",
             Self::EntryOutsideStore(_) => "entry_outside_store",
+            Self::EntryAlreadyExists(_) => "entry_already_exists",
             Self::EntryNotFound(_) => "entry_not_found",
             Self::InvalidEntryName { .. } => "invalid_entry_name",
             Self::GpgNotFound => "gpg_not_found",

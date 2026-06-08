@@ -13,7 +13,12 @@ impl<'store, 'gpg> InsertEntry<'store, 'gpg> {
         Self { store, gpg }
     }
 
-    pub fn execute(&self, entry_name: &str, content: &str) -> Result<(), PasswordStoreError> {
+    pub fn execute(
+        &self,
+        entry_name: &str,
+        content: &str,
+        force: bool,
+    ) -> Result<(), PasswordStoreError> {
         let entry_name = EntryName::from_user_input(entry_name).map_err(|error| {
             PasswordStoreError::InvalidEntryName {
                 entry: entry_name.to_owned(),
@@ -21,6 +26,13 @@ impl<'store, 'gpg> InsertEntry<'store, 'gpg> {
             }
         })?;
         let encrypted_file = entry_name.encrypted_file_path(self.store.path());
+
+        if encrypted_file.exists() && !force {
+            return Err(PasswordStoreError::EntryAlreadyExists(
+                entry_name.as_str().to_owned(),
+            ));
+        }
+
         let recipients = recipients_for_entry(self.store.path(), &encrypted_file)?;
 
         if let Some(parent) = encrypted_file.parent() {

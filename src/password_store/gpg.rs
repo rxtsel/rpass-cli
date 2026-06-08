@@ -253,8 +253,7 @@ mod tests {
     use std::ffi::OsString;
 
     use super::{
-        GpgCommand, first_line, gpg_error_message, gpg_program_from_environment_value,
-        gpg_requires_passphrase,
+        first_line, gpg_error_message, gpg_program_from_environment_value, gpg_requires_passphrase,
     };
 
     #[test]
@@ -275,7 +274,7 @@ mod tests {
         .expect("script");
         make_executable(&script);
 
-        let output = GpgCommand::new(script)
+        let output = super::GpgCommand::new(script)
             .decrypt(&encrypted_file, None)
             .expect("decrypt");
 

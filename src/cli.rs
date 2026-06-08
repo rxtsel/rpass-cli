@@ -270,6 +270,13 @@ fn command_entry_content() -> Result<String, CliError> {
     if std::io::stdin().is_terminal() {
         let password = rpassword::prompt_password("Enter password: ")
             .map_err(CliError::ReadTerminalPassword)?;
+        let confirmation = rpassword::prompt_password("Retype password: ")
+            .map_err(CliError::ReadTerminalPassword)?;
+
+        if password != confirmation {
+            return Err(CliError::PasswordConfirmationMismatch);
+        }
+
         return Ok(format!("{password}\n"));
     }
 
@@ -410,6 +417,9 @@ pub enum CliError {
     #[error("failed to read passphrase from stdin: {0}")]
     ReadPassphrase(std::io::Error),
 
+    #[error("password confirmation did not match")]
+    PasswordConfirmationMismatch,
+
     #[error("doctor checks failed")]
     DoctorFailed,
 
@@ -430,6 +440,7 @@ impl CliError {
             Self::ReadStdin(_) => "read_stdin_failed",
             Self::ReadTerminalPassword(_) => "read_terminal_password_failed",
             Self::ReadPassphrase(_) => "read_passphrase_failed",
+            Self::PasswordConfirmationMismatch => "password_confirmation_mismatch",
             Self::DoctorFailed => "doctor_checks_failed",
             Self::Reported => "reported",
         }

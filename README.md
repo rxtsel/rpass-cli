@@ -27,6 +27,18 @@ otpauth://totp/...
 - Avoid Bash-specific behavior.
 - Keep compatibility with existing `.gpg` entries and `.gpg-id` files.
 
+## Installation
+
+Prebuilt binaries and installers are available on the GitHub Releases page.
+
+Install from crates.io with:
+
+```bash
+cargo install rpass-cli
+```
+
+The crates.io package is `rpass-cli`; the installed binary is `rpass`.
+
 ## Requirements
 
 ### Windows

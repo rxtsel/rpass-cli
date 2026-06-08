@@ -32,7 +32,10 @@ fn inserts_multiline_entry_by_encrypting_stdin_with_store_recipients() {
 
     let recipients =
         fs::read_to_string(store.path().join("gpg-recipients.txt")).expect("recipients");
-    assert_eq!(recipients, "alice@example.com\n");
+    assert_eq!(
+        recipients.lines().collect::<Vec<_>>(),
+        vec!["alice@example.com"]
+    );
 }
 
 #[test]
@@ -133,7 +136,10 @@ fn inserts_entry_with_nearest_directory_recipients() {
 
     let recipients =
         fs::read_to_string(store.path().join("gpg-recipients.txt")).expect("recipients");
-    assert_eq!(recipients, "team@example.com\n");
+    assert_eq!(
+        recipients.lines().collect::<Vec<_>>(),
+        vec!["team@example.com"]
+    );
 }
 
 #[test]

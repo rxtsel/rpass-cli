@@ -8,8 +8,8 @@ use clap::{ArgAction, Parser, Subcommand, ValueHint};
 use serde::Serialize;
 
 use crate::password_store::{
-    DecryptedEntry, DoctorReport, GpgCommand, InsertEntry, ListEntries, OtpCode, PasswordStore,
-    SearchEntries, ShowEntry, StoreDirectory,
+    DecryptedEntry, DoctorReport, EditEntry, GpgCommand, InsertEntry, ListEntries, OtpCode,
+    PasswordStore, SearchEntries, ShowEntry, StoreDirectory,
 };
 use tree_output::EntryTree;
 
@@ -49,6 +49,9 @@ enum Command {
 
     #[command(about = "Insert a password store entry")]
     Insert(InsertCommand),
+
+    #[command(about = "Edit a password store entry")]
+    Edit(EditCommand),
 
     #[command(about = "Generate an OTP code for a password store entry")]
     Otp(OtpCommand),
@@ -98,6 +101,14 @@ struct InsertCommand {
 }
 
 #[derive(Debug, Parser)]
+struct EditCommand {
+    entry: String,
+
+    #[arg(long)]
+    json: bool,
+}
+
+#[derive(Debug, Parser)]
 struct OtpCommand {
     entry: String,
 
@@ -134,6 +145,7 @@ pub fn run() -> Result<(), CliError> {
         Command::List(command) => list_entries(command, store_directory),
         Command::Show(command) => show_entry(command, store_directory),
         Command::Insert(command) => insert_entry(command, store_directory),
+        Command::Edit(command) => edit_entry(command, store_directory),
         Command::Otp(command) => generate_otp(command, store_directory),
         Command::Search(command) => search_entries(command, store_directory),
         Command::Doctor(command) => run_doctor(command, store_directory),
@@ -157,6 +169,7 @@ impl Command {
             Self::List(command) => command.json,
             Self::Show(command) => command.json,
             Self::Insert(command) => command.json,
+            Self::Edit(command) => command.json,
             Self::Otp(command) => command.json,
             Self::Search(command) => command.json,
             Self::Doctor(command) => command.json,
@@ -245,6 +258,19 @@ fn insert_entry(command: InsertCommand, store_directory: StoreDirectory) -> Resu
 fn print_json_insert(entry_name: &str) -> Result<(), CliError> {
     let json = serde_json::to_string_pretty(&InsertJson { name: entry_name })?;
     println!("{json}");
+    Ok(())
+}
+
+fn edit_entry(command: EditCommand, store_directory: StoreDirectory) -> Result<(), CliError> {
+    let store = PasswordStore::open(store_directory)?;
+    let gpg = GpgCommand::from_environment();
+
+    EditEntry::new(&store, &gpg).execute(&command.entry)?;
+
+    if command.json {
+        print_json_insert(&command.entry)?;
+    }
+
     Ok(())
 }
 

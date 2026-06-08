@@ -196,6 +196,138 @@ cat > "$output"
 
 #[cfg(windows)]
 #[allow(dead_code)]
+pub fn editing_script(directory: &Path, output: &str) -> PathBuf {
+    let script = directory.join("editor.cmd");
+    let output_file = directory.join("editor-output.txt");
+
+    fs::write(&output_file, output).expect("editor output");
+    fs::write(
+        &script,
+        format!(
+            "@echo off\r\ntype \"{}\" > \"%~1\"\r\n",
+            output_file.display()
+        ),
+    )
+    .expect("script");
+    script
+}
+
+#[cfg(not(windows))]
+#[allow(dead_code)]
+pub fn editing_script(directory: &Path, output: &str) -> PathBuf {
+    let script = directory.join("editor");
+    let output_file = directory.join("editor-output.txt");
+
+    fs::write(&output_file, output).expect("editor output");
+    fs::write(
+        &script,
+        format!("#!/bin/sh\ncat '{}' > \"$1\"\n", output_file.display()),
+    )
+    .expect("script");
+    make_executable(&script);
+    script
+}
+
+#[cfg(windows)]
+#[allow(dead_code)]
+pub fn editing_gpg_script(directory: &Path, decrypted_output: &str) -> PathBuf {
+    let script = directory.join("gpg-edit.cmd");
+    let decrypted_file = directory.join("gpg-decrypted.txt");
+    let recipients_file = directory.join("gpg-recipients.txt");
+
+    fs::write(&decrypted_file, decrypted_output).expect("decrypted output");
+    fs::write(
+        &script,
+        format!(
+            r#"@echo off
+set output=
+if exist "{recipients}" del "{recipients}"
+:args
+if "%~1"=="" goto encrypt
+if "%~1"=="--decrypt" goto decrypt
+if "%~1"=="--recipient" (
+  echo %~2>>"{recipients}"
+  shift
+  shift
+  goto args
+)
+if "%~1"=="--output" (
+  set output=%~2
+  shift
+  shift
+  goto args
+)
+shift
+goto args
+:decrypt
+type "{decrypted}"
+exit /b 0
+:encrypt
+findstr /r ".*" > "%output%"
+exit /b 0
+"#,
+            recipients = recipients_file.display(),
+            decrypted = decrypted_file.display()
+        ),
+    )
+    .expect("script");
+    script
+}
+
+#[cfg(not(windows))]
+#[allow(dead_code)]
+pub fn editing_gpg_script(directory: &Path, decrypted_output: &str) -> PathBuf {
+    let script = directory.join("gpg-edit");
+    let decrypted_file = directory.join("gpg-decrypted.txt");
+    let recipients_file = directory.join("gpg-recipients.txt");
+
+    fs::write(&decrypted_file, decrypted_output).expect("decrypted output");
+    fs::write(
+        &script,
+        format!(
+            r#"#!/bin/sh
+set -eu
+recipients_file='{}'
+decrypted_file='{}'
+: > "$recipients_file"
+output=''
+mode='encrypt'
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --decrypt)
+      mode='decrypt'
+      shift
+      ;;
+    --recipient)
+      printf '%s\n' "$2" >> "$recipients_file"
+      shift 2
+      ;;
+    --output)
+      output="$2"
+      shift 2
+      ;;
+    *)
+      shift
+      ;;
+  esac
+done
+if [ "$mode" = "decrypt" ]; then
+  cat "$decrypted_file"
+  exit 0
+fi
+cat > "$output"
+"#,
+            recipients_file.display(),
+            decrypted_file.display()
+        ),
+    )
+    .expect("script");
+    make_executable(&script);
+    script
+}
+
+#[cfg(windows)]
+#[allow(dead_code)]
 pub fn failing_gpg_script(directory: &Path, message: &str) -> PathBuf {
     let script = directory.join("gpg-fail.cmd");
 

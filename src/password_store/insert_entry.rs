@@ -43,7 +43,7 @@ impl<'store, 'gpg> InsertEntry<'store, 'gpg> {
     }
 }
 
-fn recipients_for_entry(
+pub(super) fn recipients_for_entry(
     store_root: &Path,
     encrypted_file: &Path,
 ) -> Result<Vec<String>, PasswordStoreError> {

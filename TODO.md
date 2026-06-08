@@ -106,7 +106,7 @@ Goal: add write operations while preserving interoperability with `pass`, iOS,
 Android Password Store, and existing Git-based stores.
 
 - [x] `rpass insert <entry>`
-- [ ] `rpass edit <entry>`
+- [x] `rpass edit <entry>`
 - [ ] `rpass generate <entry> <length>`
 - [ ] `rpass rm <entry>`
 - [ ] `rpass mv <old-entry> <new-entry>`

@@ -78,6 +78,9 @@ pub enum PasswordStoreError {
     #[error("entry does not exist: {0}")]
     EntryNotFound(String),
 
+    #[error("editor failed: {0}")]
+    EditorFailed(String),
+
     #[error("invalid entry name '{entry}': {reason}")]
     InvalidEntryName { entry: String, reason: &'static str },
 
@@ -124,6 +127,7 @@ impl PasswordStoreError {
             Self::EntryOutsideStore(_) => "entry_outside_store",
             Self::EntryAlreadyExists(_) => "entry_already_exists",
             Self::EntryNotFound(_) => "entry_not_found",
+            Self::EditorFailed(_) => "editor_failed",
             Self::InvalidEntryName { .. } => "invalid_entry_name",
             Self::GpgNotFound => "gpg_not_found",
             Self::GpgPassphraseRequired => "gpg_passphrase_required",

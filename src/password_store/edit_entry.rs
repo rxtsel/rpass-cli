@@ -18,7 +18,7 @@ impl<'store, 'gpg> EditEntry<'store, 'gpg> {
         Self { store, gpg }
     }
 
-    pub fn execute(&self, entry_name: &str) -> Result<(), PasswordStoreError> {
+    pub fn execute(&self, entry_name: &str) -> Result<bool, PasswordStoreError> {
         let entry_name = EntryName::from_user_input(entry_name).map_err(|error| {
             PasswordStoreError::InvalidEntryName {
                 entry: entry_name.to_owned(),
@@ -32,14 +32,20 @@ impl<'store, 'gpg> EditEntry<'store, 'gpg> {
             String::new()
         };
         let edited_content = edit_content(&content)?;
-        let recipients = recipients_for_entry(self.store.path(), &encrypted_file)?;
+        let changed = edited_content != content;
 
-        if let Some(parent) = encrypted_file.parent() {
-            fs::create_dir_all(parent)?;
+        if changed {
+            let recipients = recipients_for_entry(self.store.path(), &encrypted_file)?;
+
+            if let Some(parent) = encrypted_file.parent() {
+                fs::create_dir_all(parent)?;
+            }
+
+            self.gpg
+                .encrypt(&edited_content, &encrypted_file, &recipients)?;
         }
 
-        self.gpg
-            .encrypt(&edited_content, &encrypted_file, &recipients)
+        Ok(changed)
     }
 }
 

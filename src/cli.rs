@@ -265,10 +265,14 @@ fn edit_entry(command: EditCommand, store_directory: StoreDirectory) -> Result<(
     let store = PasswordStore::open(store_directory)?;
     let gpg = GpgCommand::from_environment();
 
-    EditEntry::new(&store, &gpg).execute(&command.entry)?;
+    let changed = EditEntry::new(&store, &gpg).execute(&command.entry)?;
 
-    if command.json {
-        print_json_insert(&command.entry)?;
+    if changed {
+        if command.json {
+            print_json_insert(&command.entry)?;
+        } else {
+            println!("Entry '{}' updated", command.entry);
+        }
     }
 
     Ok(())

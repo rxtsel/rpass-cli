@@ -26,7 +26,7 @@ fn edits_existing_entry_with_editor_and_reencrypts() {
         ])
         .assert()
         .success()
-        .stdout("")
+        .stdout("Entry 'email/work' updated\n")
         .stderr("");
 
     let encrypted = fs::read_to_string(store.path().join("email/work.gpg")).expect("entry");

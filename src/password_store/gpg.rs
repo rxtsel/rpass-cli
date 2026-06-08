@@ -30,17 +30,14 @@ impl GpgCommand {
         encrypted_file: &Path,
         passphrase: Option<&str>,
     ) -> Result<String, PasswordStoreError> {
-        let mut cmd = self.decrypt_command();
-
-        if passphrase.is_some() {
-            configure_passphrase_input(&mut cmd);
-        }
-
-        cmd.arg("--decrypt").arg(encrypted_file);
-
         let output = if let Some(passphrase) = passphrase {
+            let mut cmd = self.loopback_decrypt_command();
+            configure_passphrase_input(&mut cmd);
+            cmd.arg("--decrypt").arg(encrypted_file);
             run_with_passphrase(&mut cmd, passphrase)?
         } else {
+            let mut cmd = self.interactive_decrypt_command();
+            cmd.arg("--decrypt").arg(encrypted_file);
             cmd.output().map_err(map_gpg_spawn_error)?
         };
 
@@ -61,7 +58,13 @@ impl GpgCommand {
         String::from_utf8(output.stdout).map_err(PasswordStoreError::GpgOutputNotUtf8)
     }
 
-    fn decrypt_command(&self) -> Command {
+    fn interactive_decrypt_command(&self) -> Command {
+        let mut cmd = Command::new(&self.program);
+        cmd.arg("--quiet").arg("--yes");
+        cmd
+    }
+
+    fn loopback_decrypt_command(&self) -> Command {
         let mut cmd = Command::new(&self.program);
         cmd.arg("--quiet")
             .arg("--batch")
@@ -70,6 +73,51 @@ impl GpgCommand {
             .arg("--pinentry-mode=loopback")
             .arg("--status-fd=2");
         cmd
+    }
+
+    pub fn encrypt(
+        &self,
+        content: &str,
+        output_file: &Path,
+        recipients: &[String],
+    ) -> Result<(), PasswordStoreError> {
+        let mut cmd = Command::new(&self.program);
+        cmd.arg("--quiet")
+            .arg("--batch")
+            .arg("--yes")
+            .arg("--no-tty")
+            .arg("--encrypt")
+            .arg("--output")
+            .arg(output_file)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
+
+        for recipient in recipients {
+            cmd.arg("--recipient").arg(recipient);
+        }
+
+        let mut child = cmd.spawn().map_err(map_gpg_spawn_error)?;
+        let stdin_error = match child.stdin.take() {
+            Some(mut stdin) => stdin.write_all(content.as_bytes()).err(),
+            None => Some(std::io::Error::new(
+                std::io::ErrorKind::BrokenPipe,
+                "gpg stdin was unavailable",
+            )),
+        };
+        let output = child.wait_with_output().map_err(map_gpg_spawn_error)?;
+
+        if output.status.success() {
+            if let Some(error) = stdin_error {
+                return Err(PasswordStoreError::Io(error));
+            }
+
+            return Ok(());
+        }
+
+        Err(PasswordStoreError::GpgEncryptFailed(gpg_error_message(
+            &output.stderr,
+        )))
     }
 
     pub fn program_display(&self) -> String {
@@ -207,6 +255,45 @@ mod tests {
     use super::{
         first_line, gpg_error_message, gpg_program_from_environment_value, gpg_requires_passphrase,
     };
+
+    #[test]
+    #[cfg(not(windows))]
+    fn decrypt_without_passphrase_allows_interactive_pinentry() {
+        let temp_dir = tempfile::TempDir::new().expect("temp dir");
+        let encrypted_file = temp_dir.path().join("entry.gpg");
+        std::fs::write(&encrypted_file, "").expect("entry");
+        let args_file = temp_dir.path().join("args.txt");
+        let script = temp_dir.path().join("gpg");
+        std::fs::write(
+            &script,
+            format!(
+                "#!/bin/sh\nprintf '%s\\n' \"$@\" > '{}'\nprintf 'secret\\n'\n",
+                args_file.display()
+            ),
+        )
+        .expect("script");
+        make_executable(&script);
+
+        let output = super::GpgCommand::new(script)
+            .decrypt(&encrypted_file, None)
+            .expect("decrypt");
+
+        let args = std::fs::read_to_string(args_file).expect("args");
+        assert_eq!(output, "secret\n");
+        assert!(!args.contains("--batch"));
+        assert!(!args.contains("--pinentry-mode=loopback"));
+        assert!(!args.contains("--no-tty"));
+        assert!(!args.contains("--status-fd=2"));
+    }
+
+    #[cfg(not(windows))]
+    fn make_executable(path: &std::path::Path) {
+        use std::os::unix::fs::PermissionsExt;
+
+        let mut permissions = std::fs::metadata(path).expect("metadata").permissions();
+        permissions.set_mode(0o755);
+        std::fs::set_permissions(path, permissions).expect("permissions");
+    }
 
     #[test]
     fn uses_fallback_message_for_empty_gpg_stderr() {

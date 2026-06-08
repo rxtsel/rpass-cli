@@ -1,6 +1,6 @@
 mod tree_output;
 
-use std::io::Read;
+use std::io::{BufRead, IsTerminal, Read, Write};
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -8,8 +8,8 @@ use clap::{ArgAction, Parser, Subcommand, ValueHint};
 use serde::Serialize;
 
 use crate::password_store::{
-    DecryptedEntry, DoctorReport, GpgCommand, ListEntries, OtpCode, PasswordStore, SearchEntries,
-    ShowEntry, StoreDirectory,
+    DecryptedEntry, DoctorReport, GpgCommand, InsertEntry, ListEntries, OtpCode, PasswordStore,
+    SearchEntries, ShowEntry, StoreDirectory,
 };
 use tree_output::EntryTree;
 
@@ -47,6 +47,9 @@ enum Command {
     #[command(about = "Show a password store entry")]
     Show(ShowCommand),
 
+    #[command(about = "Insert a password store entry")]
+    Insert(InsertCommand),
+
     #[command(about = "Generate an OTP code for a password store entry")]
     Otp(OtpCommand),
 
@@ -72,6 +75,23 @@ struct ShowCommand {
 
     #[arg(long)]
     passphrase_stdin: bool,
+
+    #[arg(long)]
+    json: bool,
+}
+
+#[derive(Debug, Parser)]
+struct InsertCommand {
+    entry: String,
+
+    #[arg(short = 'e', long)]
+    echo: bool,
+
+    #[arg(short = 'm', long)]
+    multiline: bool,
+
+    #[arg(short = 'f', long)]
+    force: bool,
 
     #[arg(long)]
     json: bool,
@@ -113,6 +133,7 @@ pub fn run() -> Result<(), CliError> {
     let result = match cli.command {
         Command::List(command) => list_entries(command, store_directory),
         Command::Show(command) => show_entry(command, store_directory),
+        Command::Insert(command) => insert_entry(command, store_directory),
         Command::Otp(command) => generate_otp(command, store_directory),
         Command::Search(command) => search_entries(command, store_directory),
         Command::Doctor(command) => run_doctor(command, store_directory),
@@ -135,6 +156,7 @@ impl Command {
         match self {
             Self::List(command) => command.json,
             Self::Show(command) => command.json,
+            Self::Insert(command) => command.json,
             Self::Otp(command) => command.json,
             Self::Search(command) => command.json,
             Self::Doctor(command) => command.json,
@@ -206,6 +228,26 @@ fn print_json_entry(entry_name: &str, entry: DecryptedEntry) -> Result<(), CliEr
     Ok(())
 }
 
+fn insert_entry(command: InsertCommand, store_directory: StoreDirectory) -> Result<(), CliError> {
+    let store = PasswordStore::open(store_directory)?;
+    let gpg = GpgCommand::from_environment();
+    let content = command_entry_content(&command.entry, command.multiline, command.echo)?;
+
+    InsertEntry::new(&store, &gpg).execute(&command.entry, &content, command.force)?;
+
+    if command.json {
+        print_json_insert(&command.entry)?;
+    }
+
+    Ok(())
+}
+
+fn print_json_insert(entry_name: &str) -> Result<(), CliError> {
+    let json = serde_json::to_string_pretty(&InsertJson { name: entry_name })?;
+    println!("{json}");
+    Ok(())
+}
+
 fn generate_otp(command: OtpCommand, store_directory: StoreDirectory) -> Result<(), CliError> {
     let store = PasswordStore::open(store_directory)?;
     let gpg = GpgCommand::from_environment();
@@ -231,6 +273,88 @@ fn print_json_otp(entry_name: &str, otp: &OtpCode) -> Result<(), CliError> {
     })?;
     println!("{json}");
     Ok(())
+}
+
+fn command_entry_content(
+    entry_name: &str,
+    multiline: bool,
+    echo: bool,
+) -> Result<String, CliError> {
+    if multiline {
+        if std::io::stdin().is_terminal() {
+            print_multiline_help(entry_name);
+        }
+
+        return command_stdin();
+    }
+
+    if std::io::stdin().is_terminal() {
+        let password = if echo {
+            prompt_line("Enter password: ")?
+        } else {
+            rpassword::prompt_password("Enter password: ")
+                .map_err(CliError::ReadTerminalPassword)?
+        };
+        let confirmation = if echo {
+            prompt_line("Retype password: ")?
+        } else {
+            rpassword::prompt_password("Retype password: ")
+                .map_err(CliError::ReadTerminalPassword)?
+        };
+
+        if password != confirmation {
+            return Err(CliError::PasswordConfirmationMismatch);
+        }
+
+        return Ok(format!("{password}\n"));
+    }
+
+    command_stdin_first_line()
+}
+
+fn print_multiline_help(entry_name: &str) {
+    eprintln!("Enter multiline secret for {entry_name}.");
+    eprintln!("First line is password. Additional lines are metadata.");
+    eprintln!("{}", multiline_end_hint());
+}
+
+#[cfg(windows)]
+fn multiline_end_hint() -> &'static str {
+    "Press Ctrl-Z then Enter when finished."
+}
+
+#[cfg(not(windows))]
+fn multiline_end_hint() -> &'static str {
+    "Press Ctrl-D when finished."
+}
+
+fn prompt_line(prompt: &str) -> Result<String, CliError> {
+    eprint!("{prompt}");
+    std::io::stderr().flush().map_err(CliError::ReadStdin)?;
+
+    let mut input = String::new();
+    std::io::stdin()
+        .lock()
+        .read_line(&mut input)
+        .map_err(CliError::ReadStdin)?;
+    Ok(input.trim_end_matches(['\r', '\n']).to_owned())
+}
+
+fn command_stdin_first_line() -> Result<String, CliError> {
+    let mut input = String::new();
+    std::io::stdin()
+        .lock()
+        .read_line(&mut input)
+        .map_err(CliError::ReadStdin)?;
+    Ok(input)
+}
+
+fn command_stdin() -> Result<String, CliError> {
+    let mut input = String::new();
+    std::io::stdin()
+        .read_to_string(&mut input)
+        .map_err(CliError::ReadStdin)?;
+    Ok(input)
 }
 
 fn command_passphrase(
@@ -316,6 +440,11 @@ struct ShowEntryJson<'entry> {
 }
 
 #[derive(Debug, Serialize)]
+struct InsertJson<'entry> {
+    name: &'entry str,
+}
+
+#[derive(Debug, Serialize)]
 struct OtpJson<'entry> {
     name: &'entry str,
     code: &'entry str,
@@ -345,8 +474,17 @@ pub enum CliError {
     #[error("system clock is before the Unix epoch: {0}")]
     SystemClock(#[from] std::time::SystemTimeError),
 
+    #[error("failed to read stdin: {0}")]
+    ReadStdin(std::io::Error),
+
+    #[error("failed to read password from terminal: {0}")]
+    ReadTerminalPassword(std::io::Error),
+
     #[error("failed to read passphrase from stdin: {0}")]
     ReadPassphrase(std::io::Error),
+
+    #[error("password confirmation did not match")]
+    PasswordConfirmationMismatch,
 
     #[error("doctor checks failed")]
     DoctorFailed,
@@ -365,7 +503,10 @@ impl CliError {
             Self::PasswordStore(error) => error.code(),
             Self::Json(_) => "json_serialization_failed",
             Self::SystemClock(_) => "system_clock_before_unix_epoch",
+            Self::ReadStdin(_) => "read_stdin_failed",
+            Self::ReadTerminalPassword(_) => "read_terminal_password_failed",
             Self::ReadPassphrase(_) => "read_passphrase_failed",
+            Self::PasswordConfirmationMismatch => "password_confirmation_mismatch",
             Self::DoctorFailed => "doctor_checks_failed",
             Self::Reported => "reported",
         }

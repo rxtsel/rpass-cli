@@ -27,6 +27,18 @@ otpauth://totp/...
 - Avoid Bash-specific behavior.
 - Keep compatibility with existing `.gpg` entries and `.gpg-id` files.
 
+## Installation
+
+Prebuilt binaries and installers are available on the GitHub Releases page.
+
+Install from crates.io with:
+
+```bash
+cargo install rpass-cli
+```
+
+The crates.io package is `rpass-cli`; the installed binary is `rpass`.
+
 ## Requirements
 
 ### Windows
@@ -55,11 +67,12 @@ otpauth://totp/...
 
 ## Current Scope
 
-`rpass` is currently a read-only backend. It reads existing password-store
-repositories and decrypts existing `.gpg` entries with external GnuPG.
+`rpass` reads existing password-store repositories and decrypts existing `.gpg`
+entries with external GnuPG. It also supports inserting new entries with
+external GnuPG encryption.
 
-Write commands such as `insert`, `edit`, `generate`, `rm`, `mv`, and store
-initialization are intentionally not implemented yet.
+Write commands such as `edit`, `generate`, `rm`, `mv`, and store initialization
+are intentionally not implemented yet.
 
 ## Commands
 
@@ -71,12 +84,21 @@ rpass search openai --json
 rpass show personal/openai.com
 rpass show personal/openai.com --json
 rpass show personal/openai.com --json --passphrase-stdin
+rpass insert personal/openai.com
+rpass insert --echo personal/openai.com
+printf 'password\nusername: alice\n' | rpass insert --multiline personal/openai.com
+rpass insert --force personal/openai.com
 rpass otp personal/openai.com
 rpass otp personal/openai.com --json
 rpass otp personal/openai.com --json --passphrase-stdin
 rpass doctor
 rpass doctor --json
 ```
+
+`insert` prompts for a password and confirmation when run in an interactive
+terminal. Use `--echo` to show input, `--multiline` to read the full entry until
+EOF, and `--force` to overwrite an existing entry. In multiline mode, the first
+line is the password and additional lines are metadata.
 
 `--passphrase-stdin` reads a single passphrase from standard input and passes it
 to GnuPG through loopback pinentry. It is intended for integrations that cannot
@@ -114,7 +136,7 @@ Supported behavior:
 
 Known differences from `pass`:
 
-- only read-only commands are supported;
+- write support is limited to `insert`;
 - shell completion, clipboard, QR code, Git, and edit workflows are not
   implemented;
 - unsupported `pass` flags are rejected instead of ignored;

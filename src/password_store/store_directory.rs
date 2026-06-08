@@ -72,6 +72,9 @@ pub enum PasswordStoreError {
     #[error("entry path is outside the password store: {0}")]
     EntryOutsideStore(PathBuf),
 
+    #[error("entry already exists: {0}")]
+    EntryAlreadyExists(String),
+
     #[error("entry does not exist: {0}")]
     EntryNotFound(String),
 
@@ -84,8 +87,14 @@ pub enum PasswordStoreError {
     #[error("gpg requires a passphrase; use --passphrase to provide it")]
     GpgPassphraseRequired,
 
+    #[error("no .gpg-id file found for entry")]
+    GpgIdNotFound,
+
     #[error("gpg failed to decrypt entry: {0}")]
     GpgDecryptFailed(String),
+
+    #[error("gpg failed to encrypt entry: {0}")]
+    GpgEncryptFailed(String),
 
     #[error("gpg decrypted entry was empty")]
     GpgEmptyOutput,
@@ -113,11 +122,14 @@ impl PasswordStoreError {
             Self::StoreIsNotDirectory(_) => "store_is_not_directory",
             Self::HomeDirectoryUnavailable => "home_directory_unavailable",
             Self::EntryOutsideStore(_) => "entry_outside_store",
+            Self::EntryAlreadyExists(_) => "entry_already_exists",
             Self::EntryNotFound(_) => "entry_not_found",
             Self::InvalidEntryName { .. } => "invalid_entry_name",
             Self::GpgNotFound => "gpg_not_found",
             Self::GpgPassphraseRequired => "gpg_passphrase_required",
+            Self::GpgIdNotFound => "gpg_id_not_found",
             Self::GpgDecryptFailed(_) => "gpg_decrypt_failed",
+            Self::GpgEncryptFailed(_) => "gpg_encrypt_failed",
             Self::GpgEmptyOutput => "gpg_empty_output",
             Self::GpgOutputNotUtf8(_) => "gpg_output_not_utf8",
             Self::GpgVersionFailed(_) => "gpg_version_failed",

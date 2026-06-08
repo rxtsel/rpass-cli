@@ -11,5 +11,5 @@ release_always = false
 semver_check = true
 
 [[package]]
-name = "rpass"
+name = "rpass-cli"
 changelog_path = "CHANGELOG.md"

@@ -8,8 +8,8 @@ use clap::{ArgAction, Parser, Subcommand, ValueHint};
 use serde::Serialize;
 
 use crate::password_store::{
-    DecryptedEntry, DoctorReport, GpgCommand, InsertEntry, ListEntries, OtpCode, PasswordStore,
-    SearchEntries, ShowEntry, StoreDirectory,
+    DecryptedEntry, DoctorReport, EditEntry, GpgCommand, InsertEntry, ListEntries, OtpCode,
+    PasswordStore, SearchEntries, ShowEntry, StoreDirectory,
 };
 use tree_output::EntryTree;
 
@@ -19,6 +19,7 @@ use tree_output::EntryTree;
     bin_name = "rpass",
     version,
     about = "A password-store compatible backend",
+    subcommand_required = false,
     disable_help_subcommand = true,
     disable_version_flag = true
 )]
@@ -35,8 +36,14 @@ struct Cli {
     )]
     store_dir: Option<PathBuf>,
 
+    #[arg(
+        value_name = "ENTRY",
+        help = "Show this password store entry (default command)"
+    )]
+    entry: Option<String>,
+
     #[command(subcommand)]
-    command: Command,
+    command: Option<Command>,
 }
 
 #[derive(Debug, Subcommand)]
@@ -49,6 +56,9 @@ enum Command {
 
     #[command(about = "Insert a password store entry")]
     Insert(InsertCommand),
+
+    #[command(about = "Edit a password store entry")]
+    Edit(EditCommand),
 
     #[command(about = "Generate an OTP code for a password store entry")]
     Otp(OtpCommand),
@@ -69,9 +79,6 @@ struct ListCommand {
 #[derive(Debug, Parser)]
 struct ShowCommand {
     entry: String,
-
-    #[arg(long, conflicts_with = "passphrase_stdin")]
-    passphrase: Option<String>,
 
     #[arg(long)]
     passphrase_stdin: bool,
@@ -98,11 +105,16 @@ struct InsertCommand {
 }
 
 #[derive(Debug, Parser)]
-struct OtpCommand {
+struct EditCommand {
     entry: String,
 
-    #[arg(long, conflicts_with = "passphrase_stdin")]
-    passphrase: Option<String>,
+    #[arg(long)]
+    json: bool,
+}
+
+#[derive(Debug, Parser)]
+struct OtpCommand {
+    entry: String,
 
     #[arg(long)]
     passphrase_stdin: bool,
@@ -127,16 +139,37 @@ struct DoctorCommand {
 
 pub fn run() -> Result<(), CliError> {
     let cli = Cli::parse();
-    let wants_json_error = cli.command.wants_json();
+    let wants_json_error = cli.command.as_ref().is_some_and(Command::wants_json);
     let store_directory = StoreDirectory::resolve(cli.store_dir)?;
 
     let result = match cli.command {
-        Command::List(command) => list_entries(command, store_directory),
-        Command::Show(command) => show_entry(command, store_directory),
-        Command::Insert(command) => insert_entry(command, store_directory),
-        Command::Otp(command) => generate_otp(command, store_directory),
-        Command::Search(command) => search_entries(command, store_directory),
-        Command::Doctor(command) => run_doctor(command, store_directory),
+        Some(Command::List(command)) => list_entries(command, store_directory),
+        Some(Command::Show(command)) => show_entry(command, store_directory),
+        Some(Command::Insert(command)) => insert_entry(command, store_directory),
+        Some(Command::Edit(command)) => edit_entry(command, store_directory),
+        Some(Command::Otp(command)) => generate_otp(command, store_directory),
+        Some(Command::Search(command)) => search_entries(command, store_directory),
+        Some(Command::Doctor(command)) => run_doctor(command, store_directory),
+        None => {
+            if let Some(entry) = cli.entry {
+                show_entry(
+                    ShowCommand {
+                        entry,
+                        passphrase_stdin: false,
+                        json: false,
+                    },
+                    store_directory,
+                )
+            } else {
+                eprintln!("Usage: rpass [OPTIONS] [ENTRY] [COMMAND]");
+                eprintln!();
+                eprintln!("Examples:");
+                eprintln!("  rpass list");
+                eprintln!("  rpass example/login");
+                eprintln!("  rpass edit example/login");
+                Err(CliError::NoEntryPoint)
+            }
+        }
     };
 
     if let Err(error) = result {
@@ -157,6 +190,7 @@ impl Command {
             Self::List(command) => command.json,
             Self::Show(command) => command.json,
             Self::Insert(command) => command.json,
+            Self::Edit(command) => command.json,
             Self::Otp(command) => command.json,
             Self::Search(command) => command.json,
             Self::Doctor(command) => command.json,
@@ -204,7 +238,7 @@ fn search_entries(command: SearchCommand, store_directory: StoreDirectory) -> Re
 fn show_entry(command: ShowCommand, store_directory: StoreDirectory) -> Result<(), CliError> {
     let store = PasswordStore::open(store_directory)?;
     let gpg = GpgCommand::from_environment();
-    let passphrase = command_passphrase(command.passphrase, command.passphrase_stdin)?;
+    let passphrase = command_passphrase(command.passphrase_stdin)?;
     let output = ShowEntry::new(&store, &gpg).execute(&command.entry, passphrase.as_deref())?;
 
     if command.json {
@@ -248,10 +282,27 @@ fn print_json_insert(entry_name: &str) -> Result<(), CliError> {
     Ok(())
 }
 
+fn edit_entry(command: EditCommand, store_directory: StoreDirectory) -> Result<(), CliError> {
+    let store = PasswordStore::open(store_directory)?;
+    let gpg = GpgCommand::from_environment();
+
+    let changed = EditEntry::new(&store, &gpg).execute(&command.entry)?;
+
+    if changed {
+        if command.json {
+            print_json_insert(&command.entry)?;
+        } else {
+            println!("Entry '{}' updated", command.entry);
+        }
+    }
+
+    Ok(())
+}
+
 fn generate_otp(command: OtpCommand, store_directory: StoreDirectory) -> Result<(), CliError> {
     let store = PasswordStore::open(store_directory)?;
     let gpg = GpgCommand::from_environment();
-    let passphrase = command_passphrase(command.passphrase, command.passphrase_stdin)?;
+    let passphrase = command_passphrase(command.passphrase_stdin)?;
     let output = ShowEntry::new(&store, &gpg).execute(&command.entry, passphrase.as_deref())?;
     let otp = OtpCode::generate_at(&output.parsed, current_unix_timestamp()?)?;
 
@@ -357,12 +408,9 @@ fn command_stdin() -> Result<String, CliError> {
     Ok(input)
 }
 
-fn command_passphrase(
-    passphrase: Option<String>,
-    passphrase_stdin: bool,
-) -> Result<Option<String>, CliError> {
+fn command_passphrase(passphrase_stdin: bool) -> Result<Option<String>, CliError> {
     if !passphrase_stdin {
-        return Ok(passphrase);
+        return Ok(None);
     }
 
     let mut input = String::new();
@@ -491,6 +539,9 @@ pub enum CliError {
 
     #[error("error already reported")]
     Reported,
+
+    #[error("no entry or subcommand provided")]
+    NoEntryPoint,
 }
 
 impl CliError {
@@ -509,6 +560,7 @@ impl CliError {
             Self::PasswordConfirmationMismatch => "password_confirmation_mismatch",
             Self::DoctorFailed => "doctor_checks_failed",
             Self::Reported => "reported",
+            Self::NoEntryPoint => "no_entry_or_subcommand_provided",
         }
     }
 }

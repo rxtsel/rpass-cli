@@ -27,6 +27,24 @@ fn shows_decrypted_entry_as_text() {
 }
 
 #[test]
+fn shows_entry_without_explicit_show_subcommand() {
+    let store = password_store_with_entry("example/login.gpg");
+    let gpg = successful_gpg_script(store.path(), "dummy-password\nusername: demo\n");
+
+    rpass()
+        .env("PASSWORD_STORE_GPG", gpg)
+        .args([
+            "--store-dir",
+            store.path().to_str().expect("store path"),
+            "example/login",
+        ])
+        .assert()
+        .success()
+        .stdout("dummy-password\nusername: demo\n")
+        .stderr("");
+}
+
+#[test]
 fn shows_decrypted_entry_as_json() {
     let store = password_store_with_entry("email/work.gpg");
     let gpg = successful_gpg_script(
@@ -72,6 +90,26 @@ fn shows_decrypted_entry_as_json_with_passphrase_stdin() {
         .stdout(
             "{\n  \"name\": \"email/work\",\n  \"password\": \"secret\",\n  \"fields\": [\n    {\n      \"name\": \"username\",\n      \"value\": \"alice\"\n    }\n  ],\n  \"otp_uri\": null,\n  \"extra_lines\": []\n}\n",
         );
+}
+
+#[test]
+fn rejects_passphrase_command_line_argument() {
+    let store = password_store_with_entry("email/work.gpg");
+
+    rpass()
+        .args([
+            "--store-dir",
+            store.path().to_str().expect("store path"),
+            "show",
+            "--passphrase",
+            "not-a-real-secret",
+            "email/work",
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "unexpected argument '--passphrase'",
+        ));
 }
 
 #[test]
@@ -227,6 +265,6 @@ fn reports_passphrase_required_as_json() {
         .failure()
         .stdout("")
         .stderr(
-            "{\n  \"error\": {\n    \"code\": \"gpg_passphrase_required\",\n    \"message\": \"gpg requires a passphrase; use --passphrase to provide it\"\n  }\n}\n",
+            "{\n  \"error\": {\n    \"code\": \"gpg_passphrase_required\",\n    \"message\": \"gpg requires a passphrase; use --passphrase-stdin to provide it\"\n  }\n}\n",
         );
 }

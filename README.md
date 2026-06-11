@@ -71,26 +71,28 @@ The crates.io package is `rpass-cli`; the installed binary is `rpass`.
 entries with external GnuPG. It also supports inserting new entries with
 external GnuPG encryption.
 
-Write commands such as `edit`, `generate`, `rm`, `mv`, and store initialization
-are intentionally not implemented yet.
+Write commands such as `generate`, `rm`, `mv`, and store initialization are
+intentionally not implemented yet.
 
 ## Commands
 
 ```bash
 rpass list
 rpass list --json
-rpass search openai
-rpass search openai --json
-rpass show personal/openai.com
-rpass show personal/openai.com --json
-rpass show personal/openai.com --json --passphrase-stdin
-rpass insert personal/openai.com
-rpass insert --echo personal/openai.com
-printf 'password\nusername: alice\n' | rpass insert --multiline personal/openai.com
-rpass insert --force personal/openai.com
-rpass otp personal/openai.com
-rpass otp personal/openai.com --json
-rpass otp personal/openai.com --json --passphrase-stdin
+rpass search example
+rpass search example --json
+rpass example/login
+rpass show example/login
+rpass show example/login --json
+rpass show example/login --json --passphrase-stdin
+rpass insert example/login
+rpass insert --echo example/login
+printf 'dummy-password\nusername: demo\n' | rpass insert --multiline example/login
+rpass insert --force example/login
+rpass edit example/login
+rpass otp example/login
+rpass otp example/login --json
+rpass otp example/login --json --passphrase-stdin
 rpass doctor
 rpass doctor --json
 ```

@@ -8,7 +8,9 @@ fn prints_concise_root_help() {
         .arg("-h")
         .assert()
         .success()
-        .stdout(predicate::str::contains("Usage: rpass [OPTIONS] <COMMAND>"))
+        .stdout(predicate::str::contains(
+            "Usage: rpass [OPTIONS] [ENTRY] [COMMAND]",
+        ))
         .stdout(predicate::str::contains(
             "--store-dir <PATH>  Use a store directory instead of PASSWORD_STORE_DIR",
         ))
@@ -24,4 +26,26 @@ fn prints_concise_root_help() {
             "doctor  Check the local rpass environment",
         ))
         .stdout(predicate::str::contains("help  Print").not());
+}
+
+#[test]
+fn show_help_only_advertises_passphrase_stdin() {
+    Command::cargo_bin("rpass")
+        .expect("rpass binary")
+        .args(["show", "--help"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("--passphrase-stdin"))
+        .stdout(predicate::str::contains("--passphrase <").not());
+}
+
+#[test]
+fn otp_help_only_advertises_passphrase_stdin() {
+    Command::cargo_bin("rpass")
+        .expect("rpass binary")
+        .args(["otp", "--help"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("--passphrase-stdin"))
+        .stdout(predicate::str::contains("--passphrase <").not());
 }

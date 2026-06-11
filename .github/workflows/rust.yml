@@ -10,6 +10,22 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  audit:
+    name: audit dependencies
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+
+      - name: install rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: install cargo-audit
+        run: cargo install cargo-audit --locked
+
+      - name: run cargo audit
+        run: cargo audit
+
   check:
     name: ${{ matrix.os }}
     runs-on: ${{ matrix.os }}

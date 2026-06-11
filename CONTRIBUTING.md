@@ -12,6 +12,13 @@ cargo clippy --all-targets -- -D warnings
 cargo test
 ```
 
+For dependency advisory checks, install `cargo-audit` if needed and run:
+
+```bash
+cargo install cargo-audit --locked
+cargo audit
+```
+
 ## Branching Model
 
 Use trunk-based development with short-lived branches.

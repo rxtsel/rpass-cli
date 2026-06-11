@@ -76,12 +76,12 @@ and store initialization are intentionally not implemented yet.
 ## Commands
 
 ```bash
-rpass -h                    # show help
-rpass list                  # list entries
-rpass search example        # search entries
-rpass example/login         # show an entry, pass-compatible shorthand
-rpass show example/login    # show an entry explicitly
-rpass insert example/login  # insert a password interactively
+rpass -h                            # show help
+rpass list                          # list entries
+rpass search example                # search entries
+rpass example/login                 # show an entry, pass-compatible shorthand
+rpass show example/login            # show an entry explicitly
+rpass insert example/login          # insert a password interactively
 printf 'dummy-password\nusername: demo\n' | rpass insert --multiline example/login
 rpass insert --force example/login  # overwrite an entry
 rpass edit example/login            # edit or create an entry

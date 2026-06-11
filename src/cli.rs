@@ -19,6 +19,7 @@ use tree_output::EntryTree;
     bin_name = "rpass",
     version,
     about = "A password-store compatible backend",
+    subcommand_required = false,
     disable_help_subcommand = true,
     disable_version_flag = true
 )]
@@ -35,8 +36,14 @@ struct Cli {
     )]
     store_dir: Option<PathBuf>,
 
+    #[arg(
+        value_name = "ENTRY",
+        help = "Show this password store entry (default command)"
+    )]
+    entry: Option<String>,
+
     #[command(subcommand)]
-    command: Command,
+    command: Option<Command>,
 }
 
 #[derive(Debug, Subcommand)]
@@ -132,17 +139,37 @@ struct DoctorCommand {
 
 pub fn run() -> Result<(), CliError> {
     let cli = Cli::parse();
-    let wants_json_error = cli.command.wants_json();
+    let wants_json_error = cli.command.as_ref().is_some_and(Command::wants_json);
     let store_directory = StoreDirectory::resolve(cli.store_dir)?;
 
     let result = match cli.command {
-        Command::List(command) => list_entries(command, store_directory),
-        Command::Show(command) => show_entry(command, store_directory),
-        Command::Insert(command) => insert_entry(command, store_directory),
-        Command::Edit(command) => edit_entry(command, store_directory),
-        Command::Otp(command) => generate_otp(command, store_directory),
-        Command::Search(command) => search_entries(command, store_directory),
-        Command::Doctor(command) => run_doctor(command, store_directory),
+        Some(Command::List(command)) => list_entries(command, store_directory),
+        Some(Command::Show(command)) => show_entry(command, store_directory),
+        Some(Command::Insert(command)) => insert_entry(command, store_directory),
+        Some(Command::Edit(command)) => edit_entry(command, store_directory),
+        Some(Command::Otp(command)) => generate_otp(command, store_directory),
+        Some(Command::Search(command)) => search_entries(command, store_directory),
+        Some(Command::Doctor(command)) => run_doctor(command, store_directory),
+        None => {
+            if let Some(entry) = cli.entry {
+                show_entry(
+                    ShowCommand {
+                        entry,
+                        passphrase_stdin: false,
+                        json: false,
+                    },
+                    store_directory,
+                )
+            } else {
+                eprintln!("Usage: rpass [OPTIONS] [ENTRY] [COMMAND]");
+                eprintln!();
+                eprintln!("Examples:");
+                eprintln!("  rpass list");
+                eprintln!("  rpass example/login");
+                eprintln!("  rpass edit example/login");
+                Err(CliError::NoEntryPoint)
+            }
+        }
     };
 
     if let Err(error) = result {
@@ -512,6 +539,9 @@ pub enum CliError {
 
     #[error("error already reported")]
     Reported,
+
+    #[error("no entry or subcommand provided")]
+    NoEntryPoint,
 }
 
 impl CliError {
@@ -530,6 +560,7 @@ impl CliError {
             Self::PasswordConfirmationMismatch => "password_confirmation_mismatch",
             Self::DoctorFailed => "doctor_checks_failed",
             Self::Reported => "reported",
+            Self::NoEntryPoint => "no_entry_or_subcommand_provided",
         }
     }
 }

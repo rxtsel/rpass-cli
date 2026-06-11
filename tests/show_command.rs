@@ -27,6 +27,24 @@ fn shows_decrypted_entry_as_text() {
 }
 
 #[test]
+fn shows_entry_without_explicit_show_subcommand() {
+    let store = password_store_with_entry("example/login.gpg");
+    let gpg = successful_gpg_script(store.path(), "dummy-password\nusername: demo\n");
+
+    rpass()
+        .env("PASSWORD_STORE_GPG", gpg)
+        .args([
+            "--store-dir",
+            store.path().to_str().expect("store path"),
+            "example/login",
+        ])
+        .assert()
+        .success()
+        .stdout("dummy-password\nusername: demo\n")
+        .stderr("");
+}
+
+#[test]
 fn shows_decrypted_entry_as_json() {
     let store = password_store_with_entry("email/work.gpg");
     let gpg = successful_gpg_script(

@@ -8,7 +8,9 @@ fn prints_concise_root_help() {
         .arg("-h")
         .assert()
         .success()
-        .stdout(predicate::str::contains("Usage: rpass [OPTIONS] <COMMAND>"))
+        .stdout(predicate::str::contains(
+            "Usage: rpass [OPTIONS] [ENTRY] [COMMAND]",
+        ))
         .stdout(predicate::str::contains(
             "--store-dir <PATH>  Use a store directory instead of PASSWORD_STORE_DIR",
         ))

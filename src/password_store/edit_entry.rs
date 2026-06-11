@@ -50,10 +50,10 @@ impl<'store, 'gpg> EditEntry<'store, 'gpg> {
 }
 
 fn edit_content(content: &str) -> Result<String, PasswordStoreError> {
-    let temp_file = NamedTempFile::new()?;
-    fs::write(temp_file.path(), content)?;
-    run_editor(temp_file.path())?;
-    fs::read_to_string(temp_file.path()).map_err(PasswordStoreError::Io)
+    let temp_file = NamedTempFile::new()?.into_temp_path();
+    fs::write(&temp_file, content)?;
+    run_editor(&temp_file)?;
+    fs::read_to_string(&temp_file).map_err(PasswordStoreError::Io)
 }
 
 fn run_editor(path: &Path) -> Result<(), PasswordStoreError> {

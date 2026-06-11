@@ -113,7 +113,7 @@ Android Password Store, and existing Git-based stores.
 - [x] Resolve recipients from the nearest `.gpg-id`.
 - [x] Encrypt with external `gpg`.
 - [x] Preserve directory-level recipient behavior.
-- [ ] Add compatibility fixtures for encrypted writes.
+- [x] Add compatibility fixtures for encrypted writes.
 
 ## Phase 3: Git Integration
 

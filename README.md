@@ -77,16 +77,17 @@ intentionally not implemented yet.
 ## Commands
 
 ```bash
-rpass list
-rpass search example
-rpass example/login
-rpass show example/login
-rpass insert example/login
+rpass -h                    # show help
+rpass list                  # list entries
+rpass search example        # search entries
+rpass example/login         # show an entry, pass-compatible shorthand
+rpass show example/login    # show an entry explicitly
+rpass insert example/login  # insert a password interactively
 printf 'dummy-password\nusername: demo\n' | rpass insert --multiline example/login
-rpass insert --force example/login
-rpass edit example/login
-rpass otp example/login
-rpass doctor
+rpass insert --force example/login  # overwrite an entry
+rpass edit example/login            # edit or create an entry
+rpass otp example/login             # generate an OTP code
+rpass doctor                        # check local setup
 ```
 
 `insert` prompts for a password and confirmation when run in an interactive

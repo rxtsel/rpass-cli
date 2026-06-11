@@ -7,7 +7,7 @@ It keeps the existing `pass`/password-store format:
 
 ```text
 ~/.password-store/
-  personal/openai.com.gpg
+  example/login.gpg
   .gpg-id
 ```
 
@@ -65,14 +65,13 @@ The crates.io package is `rpass-cli`; the installed binary is `rpass`.
 2. `PASSWORD_STORE_DIR`
 3. `~/.password-store`
 
-## Current Scope
+## Status
 
-`rpass` reads existing password-store repositories and decrypts existing `.gpg`
-entries with external GnuPG. It also supports inserting new entries with
-external GnuPG encryption.
+`rpass` can list, search, show, insert, and edit password-store entries using
+external GnuPG. It also supports TOTP generation from `otpauth://` lines.
 
-Write commands such as `generate`, `rm`, `mv`, and store initialization are
-intentionally not implemented yet.
+Commands such as `generate`, `rm`, `mv`, Git integration, clipboard support,
+and store initialization are intentionally not implemented yet.
 
 ## Commands
 
@@ -137,24 +136,9 @@ Supported behavior:
 
 Known differences from `pass`:
 
-- write support is limited to `insert`;
-- shell completion, clipboard, QR code, Git, and edit workflows are not
-  implemented;
+- write support is limited to `insert` and `edit`;
+- shell completion, clipboard, QR code, Git, `generate`, `rm`, `mv`, and store
+  initialization are not implemented;
 - unsupported `pass` flags are rejected instead of ignored;
 - JSON output is an `rpass` integration contract, not part of the original
   `pass` CLI.
-
-## Releases
-
-Prebuilt binaries and installers are available on the GitHub Releases page.
-See `CHANGELOG.md` for release notes.
-
-## Diagnostics
-
-Run:
-
-```bash
-rpass doctor
-```
-
-It checks the store directory, `.gpg-id`, and GnuPG availability.

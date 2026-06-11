@@ -79,19 +79,20 @@ intentionally not implemented yet.
 ```bash
 rpass list
 rpass list --json
-rpass search openai
-rpass search openai --json
-rpass show personal/openai.com
-rpass show personal/openai.com --json
-rpass show personal/openai.com --json --passphrase-stdin
-rpass insert personal/openai.com
-rpass insert --echo personal/openai.com
-printf 'password\nusername: alice\n' | rpass insert --multiline personal/openai.com
-rpass insert --force personal/openai.com
-rpass edit personal/openai.com
-rpass otp personal/openai.com
-rpass otp personal/openai.com --json
-rpass otp personal/openai.com --json --passphrase-stdin
+rpass search example
+rpass search example --json
+rpass example/login
+rpass show example/login
+rpass show example/login --json
+rpass show example/login --json --passphrase-stdin
+rpass insert example/login
+rpass insert --echo example/login
+printf 'dummy-password\nusername: demo\n' | rpass insert --multiline example/login
+rpass insert --force example/login
+rpass edit example/login
+rpass otp example/login
+rpass otp example/login --json
+rpass otp example/login --json --passphrase-stdin
 rpass doctor
 rpass doctor --json
 ```

@@ -73,10 +73,8 @@ fn run_editor(path: &Path) -> Result<(), PasswordStoreError> {
 
 #[cfg(windows)]
 fn editor_command(editor: &str, path: &Path) -> Command {
-    let mut command = Command::new("cmd");
-    command
-        .arg("/C")
-        .arg(format!("{editor} \"{}\"", path.display()));
+    let mut command = Command::new(editor);
+    command.arg(path);
     command
 }
 

@@ -17,13 +17,14 @@ fn prints_concise_root_help() {
         .stdout(predicate::str::contains("List password store entries"))
         .stdout(predicate::str::contains("Show a password store entry"))
         .stdout(predicate::str::contains(
+            "Generate and insert a password store entry",
+        ))
+        .stdout(predicate::str::contains(
             "Generate an OTP code for a password store entry",
         ))
+        .stdout(predicate::str::contains("Search password store entries"))
         .stdout(predicate::str::contains(
-            "search  Search password store entries",
-        ))
-        .stdout(predicate::str::contains(
-            "doctor  Check the local rpass environment",
+            "Check the local rpass environment",
         ))
         .stdout(predicate::str::contains("help  Print").not());
 }

@@ -7,6 +7,11 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use clap::{ArgAction, Parser, Subcommand, ValueHint};
 use serde::Serialize;
 
+use crate::password_generator::{
+    PassphraseOptions, PasswordGeneratorError, PasswordOptions, default_passphrase_separator,
+    default_passphrase_words, default_password_length, generate_passphrase, generate_password,
+    max_passphrase_words, max_password_length,
+};
 use crate::password_store::{
     DecryptedEntry, DoctorReport, EditEntry, GpgCommand, InsertEntry, ListEntries, OtpCode,
     PasswordStore, SearchEntries, ShowEntry, StoreDirectory,
@@ -59,6 +64,9 @@ enum Command {
 
     #[command(about = "Edit a password store entry")]
     Edit(EditCommand),
+
+    #[command(about = "Generate and insert a password store entry")]
+    Generate(GenerateCommand),
 
     #[command(about = "Generate an OTP code for a password store entry")]
     Otp(OtpCommand),
@@ -113,6 +121,61 @@ struct EditCommand {
 }
 
 #[derive(Debug, Parser)]
+struct GenerateCommand {
+    entry: String,
+
+    #[arg(value_name = "LENGTH", conflicts_with_all = ["length_option", "phrase"])]
+    length: Option<usize>,
+
+    #[arg(
+        short = 'l',
+        long = "length",
+        value_name = "LENGTH",
+        conflicts_with = "phrase"
+    )]
+    length_option: Option<usize>,
+
+    #[arg(
+        long,
+        help = "Generate a memorable passphrase instead of a random password"
+    )]
+    phrase: bool,
+
+    #[arg(long, default_value_t = default_passphrase_words(), requires = "phrase")]
+    words: usize,
+
+    #[arg(long, default_value = default_passphrase_separator(), requires = "phrase")]
+    separator: String,
+
+    #[arg(long, requires = "phrase")]
+    capitalize: bool,
+
+    #[arg(long, requires = "phrase")]
+    number: bool,
+
+    #[arg(long, conflicts_with = "phrase")]
+    no_lowercase: bool,
+
+    #[arg(long, conflicts_with = "phrase")]
+    no_uppercase: bool,
+
+    #[arg(long, conflicts_with = "phrase")]
+    no_numbers: bool,
+
+    #[arg(long, conflicts_with_all = ["phrase", "symbols"])]
+    no_symbols: bool,
+
+    #[arg(long, value_name = "CHARS", conflicts_with = "phrase")]
+    symbols: Option<String>,
+
+    #[arg(short = 'f', long)]
+    force: bool,
+
+    #[arg(long)]
+    json: bool,
+}
+
+#[derive(Debug, Parser)]
 struct OtpCommand {
     entry: String,
 
@@ -147,6 +210,7 @@ pub fn run() -> Result<(), CliError> {
         Some(Command::Show(command)) => show_entry(command, store_directory),
         Some(Command::Insert(command)) => insert_entry(command, store_directory),
         Some(Command::Edit(command)) => edit_entry(command, store_directory),
+        Some(Command::Generate(command)) => generate_entry(command, store_directory),
         Some(Command::Otp(command)) => generate_otp(command, store_directory),
         Some(Command::Search(command)) => search_entries(command, store_directory),
         Some(Command::Doctor(command)) => run_doctor(command, store_directory),
@@ -191,6 +255,7 @@ impl Command {
             Self::Show(command) => command.json,
             Self::Insert(command) => command.json,
             Self::Edit(command) => command.json,
+            Self::Generate(command) => command.json,
             Self::Otp(command) => command.json,
             Self::Search(command) => command.json,
             Self::Doctor(command) => command.json,
@@ -296,6 +361,88 @@ fn edit_entry(command: EditCommand, store_directory: StoreDirectory) -> Result<(
         }
     }
 
+    Ok(())
+}
+
+fn generate_entry(
+    command: GenerateCommand,
+    store_directory: StoreDirectory,
+) -> Result<(), CliError> {
+    validate_generate_command(&command)?;
+
+    let store = PasswordStore::open(store_directory)?;
+    let gpg = GpgCommand::from_environment();
+    let password = generated_secret(&command)?;
+    let content = format!("{password}\n");
+
+    InsertEntry::new(&store, &gpg).execute(&command.entry, &content, command.force)?;
+
+    if command.json {
+        print_json_generate(&command.entry, &password)?;
+    } else {
+        println!("{password}");
+    }
+
+    Ok(())
+}
+
+fn validate_generate_command(command: &GenerateCommand) -> Result<(), CliError> {
+    if let Some(length) = command.length.or(command.length_option)
+        && !(1..=max_password_length()).contains(&length)
+    {
+        return Err(CliError::InvalidGenerateLength {
+            min: 1,
+            max: max_password_length(),
+        });
+    }
+
+    if command.words == 0 || command.words > max_passphrase_words() {
+        return Err(CliError::InvalidGenerateWordCount {
+            min: 1,
+            max: max_passphrase_words(),
+        });
+    }
+
+    Ok(())
+}
+
+fn generated_secret(command: &GenerateCommand) -> Result<String, CliError> {
+    if command.phrase {
+        return generate_passphrase(&PassphraseOptions {
+            words: command.words,
+            separator: command.separator.clone(),
+            capitalize: command.capitalize,
+            number: command.number,
+        })
+        .map_err(CliError::PasswordGenerator);
+    }
+
+    generate_password(&PasswordOptions {
+        length: command
+            .length_option
+            .or(command.length)
+            .unwrap_or_else(default_password_length),
+        lowercase: !command.no_lowercase,
+        uppercase: !command.no_uppercase,
+        numbers: !command.no_numbers,
+        symbols: if command.no_symbols {
+            None
+        } else {
+            command
+                .symbols
+                .clone()
+                .or(PasswordOptions::default().symbols)
+        },
+    })
+    .map_err(CliError::PasswordGenerator)
+}
+
+fn print_json_generate(entry_name: &str, password: &str) -> Result<(), CliError> {
+    let json = serde_json::to_string_pretty(&GenerateJson {
+        name: entry_name,
+        password,
+    })?;
+    println!("{json}");
     Ok(())
 }
 
@@ -493,6 +640,12 @@ struct InsertJson<'entry> {
 }
 
 #[derive(Debug, Serialize)]
+struct GenerateJson<'entry> {
+    name: &'entry str,
+    password: &'entry str,
+}
+
+#[derive(Debug, Serialize)]
 struct OtpJson<'entry> {
     name: &'entry str,
     code: &'entry str,
@@ -531,6 +684,15 @@ pub enum CliError {
     #[error("failed to read passphrase from stdin: {0}")]
     ReadPassphrase(std::io::Error),
 
+    #[error(transparent)]
+    PasswordGenerator(#[from] PasswordGeneratorError),
+
+    #[error("password length must be between {min} and {max}")]
+    InvalidGenerateLength { min: usize, max: usize },
+
+    #[error("passphrase word count must be between {min} and {max}")]
+    InvalidGenerateWordCount { min: usize, max: usize },
+
     #[error("password confirmation did not match")]
     PasswordConfirmationMismatch,
 
@@ -557,6 +719,9 @@ impl CliError {
             Self::ReadStdin(_) => "read_stdin_failed",
             Self::ReadTerminalPassword(_) => "read_terminal_password_failed",
             Self::ReadPassphrase(_) => "read_passphrase_failed",
+            Self::PasswordGenerator(_) => "password_generation_failed",
+            Self::InvalidGenerateLength { .. } => "invalid_generate_length",
+            Self::InvalidGenerateWordCount { .. } => "invalid_generate_word_count",
             Self::PasswordConfirmationMismatch => "password_confirmation_mismatch",
             Self::DoctorFailed => "doctor_checks_failed",
             Self::Reported => "reported",

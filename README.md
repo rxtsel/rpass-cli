@@ -78,23 +78,15 @@ intentionally not implemented yet.
 
 ```bash
 rpass list
-rpass list --json
 rpass search example
-rpass search example --json
 rpass example/login
 rpass show example/login
-rpass show example/login --json
-rpass show example/login --json --passphrase-stdin
 rpass insert example/login
-rpass insert --echo example/login
 printf 'dummy-password\nusername: demo\n' | rpass insert --multiline example/login
 rpass insert --force example/login
 rpass edit example/login
 rpass otp example/login
-rpass otp example/login --json
-rpass otp example/login --json --passphrase-stdin
 rpass doctor
-rpass doctor --json
 ```
 
 `insert` prompts for a password and confirmation when run in an interactive
@@ -102,9 +94,15 @@ terminal. Use `--echo` to show input, `--multiline` to read the full entry until
 EOF, and `--force` to overwrite an existing entry. In multiline mode, the first
 line is the password and additional lines are metadata.
 
-`--passphrase-stdin` reads a single passphrase from standard input and passes it
-to GnuPG through loopback pinentry. It is intended for integrations that cannot
-show the native GPG pinentry UI.
+Most read commands support `--json` for integrations. Commands that decrypt
+entries also support `--passphrase-stdin` for non-interactive integrations:
+
+```bash
+printf 'gpg-passphrase\n' | rpass show example/login --json --passphrase-stdin
+printf 'gpg-passphrase\n' | rpass otp example/login --json --passphrase-stdin
+```
+
+Run `rpass <command> --help` for command-specific flags.
 
 ## JSON Contract
 

@@ -1,5 +1,6 @@
 use std::env;
 use std::ffi::OsString;
+use std::fs;
 use std::io::Write;
 use std::path::Path;
 use std::process::{ChildStdin, Command, Output, Stdio};
@@ -81,6 +82,8 @@ impl GpgCommand {
         output_file: &Path,
         recipients: &[String],
     ) -> Result<(), PasswordStoreError> {
+        let output_directory = output_file.parent().unwrap_or_else(|| Path::new("."));
+        let staged_output = tempfile::NamedTempFile::new_in(output_directory)?.into_temp_path();
         let mut cmd = Command::new(&self.program);
         cmd.arg("--quiet")
             .arg("--batch")
@@ -88,7 +91,7 @@ impl GpgCommand {
             .arg("--no-tty")
             .arg("--encrypt")
             .arg("--output")
-            .arg(output_file)
+            .arg(&staged_output)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
@@ -112,6 +115,7 @@ impl GpgCommand {
                 return Err(PasswordStoreError::Io(error));
             }
 
+            replace_file(&staged_output, output_file)?;
             return Ok(());
         }
 
@@ -206,6 +210,20 @@ fn windows_gpg_install_paths() -> Vec<std::path::PathBuf> {
         std::path::PathBuf::from(r"C:\Program Files\Gpg4win\bin\gpg.exe"),
         std::path::PathBuf::from(r"C:\Program Files (x86)\Gpg4win\bin\gpg.exe"),
     ]
+}
+
+#[cfg(not(windows))]
+fn replace_file(source: &Path, destination: &Path) -> Result<(), PasswordStoreError> {
+    fs::rename(source, destination).map_err(PasswordStoreError::Io)
+}
+
+#[cfg(windows)]
+fn replace_file(source: &Path, destination: &Path) -> Result<(), PasswordStoreError> {
+    if destination.exists() {
+        fs::remove_file(destination)?;
+    }
+
+    fs::rename(source, destination).map_err(PasswordStoreError::Io)
 }
 
 fn map_gpg_spawn_error(error: std::io::Error) -> PasswordStoreError {

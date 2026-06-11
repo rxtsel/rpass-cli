@@ -328,6 +328,150 @@ cat > "$output"
 
 #[cfg(windows)]
 #[allow(dead_code)]
+pub fn failing_encrypting_gpg_script(directory: &Path) -> PathBuf {
+    let script = directory.join("gpg-encrypt-fail.cmd");
+
+    fs::write(
+        &script,
+        r#"@echo off
+set output=
+:args
+if "%~1"=="" goto writepartial
+if "%~1"=="--output" (
+  set output=%~2
+  shift
+  shift
+  goto args
+)
+shift
+goto args
+:writepartial
+echo partial encrypted output>"%output%"
+echo gpg: encryption failed 1>&2
+exit /b 2
+"#,
+    )
+    .expect("script");
+    script
+}
+
+#[cfg(not(windows))]
+#[allow(dead_code)]
+pub fn failing_encrypting_gpg_script(directory: &Path) -> PathBuf {
+    let script = directory.join("gpg-encrypt-fail");
+
+    fs::write(
+        &script,
+        r#"#!/bin/sh
+set -eu
+output=''
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --output)
+      output="$2"
+      shift 2
+      ;;
+    *)
+      shift
+      ;;
+  esac
+done
+printf 'partial encrypted output\n' > "$output"
+printf 'gpg: encryption failed\n' >&2
+exit 2
+"#,
+    )
+    .expect("script");
+    make_executable(&script);
+    script
+}
+
+#[cfg(windows)]
+#[allow(dead_code)]
+pub fn failing_editing_gpg_script(directory: &Path, decrypted_output: &str) -> PathBuf {
+    let script = directory.join("gpg-edit-fail.cmd");
+    let decrypted_file = directory.join("gpg-edit-fail-decrypted.txt");
+
+    fs::write(&decrypted_file, decrypted_output).expect("decrypted output");
+    fs::write(
+        &script,
+        format!(
+            r#"@echo off
+set output=
+:args
+if "%~1"=="" goto encrypt
+if "%~1"=="--decrypt" goto decrypt
+if "%~1"=="--output" (
+  set output=%~2
+  shift
+  shift
+  goto args
+)
+shift
+goto args
+:decrypt
+type "{decrypted}"
+exit /b 0
+:encrypt
+echo partial encrypted output>"%output%"
+echo gpg: encryption failed 1>&2
+exit /b 2
+"#,
+            decrypted = decrypted_file.display()
+        ),
+    )
+    .expect("script");
+    script
+}
+
+#[cfg(not(windows))]
+#[allow(dead_code)]
+pub fn failing_editing_gpg_script(directory: &Path, decrypted_output: &str) -> PathBuf {
+    let script = directory.join("gpg-edit-fail");
+    let decrypted_file = directory.join("gpg-edit-fail-decrypted.txt");
+
+    fs::write(&decrypted_file, decrypted_output).expect("decrypted output");
+    fs::write(
+        &script,
+        format!(
+            r#"#!/bin/sh
+set -eu
+decrypted_file='{}'
+output=''
+mode='encrypt'
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --decrypt)
+      mode='decrypt'
+      shift
+      ;;
+    --output)
+      output="$2"
+      shift 2
+      ;;
+    *)
+      shift
+      ;;
+  esac
+done
+if [ "$mode" = "decrypt" ]; then
+  cat "$decrypted_file"
+  exit 0
+fi
+printf 'partial encrypted output\n' > "$output"
+printf 'gpg: encryption failed\n' >&2
+exit 2
+"#,
+            decrypted_file.display()
+        ),
+    )
+    .expect("script");
+    make_executable(&script);
+    script
+}
+
+#[cfg(windows)]
+#[allow(dead_code)]
 pub fn failing_gpg_script(directory: &Path, message: &str) -> PathBuf {
     let script = directory.join("gpg-fail.cmd");
 

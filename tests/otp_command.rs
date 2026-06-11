@@ -70,6 +70,26 @@ fn generates_otp_code_as_json_with_passphrase_stdin() {
 }
 
 #[test]
+fn rejects_passphrase_command_line_argument() {
+    let store = password_store_with_entry("email/work.gpg");
+
+    rpass()
+        .args([
+            "--store-dir",
+            store.path().to_str().expect("store path"),
+            "otp",
+            "--passphrase",
+            "not-a-real-secret",
+            "email/work",
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "unexpected argument '--passphrase'",
+        ));
+}
+
+#[test]
 fn accepts_lowercase_otp_secret() {
     let store = password_store_with_entry("finance/stripe.gpg");
     let gpg = successful_gpg_script(

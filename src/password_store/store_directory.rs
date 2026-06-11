@@ -87,7 +87,7 @@ pub enum PasswordStoreError {
     #[error("gpg executable was not found; install GnuPG 2.x or set PASSWORD_STORE_GPG")]
     GpgNotFound,
 
-    #[error("gpg requires a passphrase; use --passphrase to provide it")]
+    #[error("gpg requires a passphrase; use --passphrase-stdin to provide it")]
     GpgPassphraseRequired,
 
     #[error("no .gpg-id file found for entry")]

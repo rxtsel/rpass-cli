@@ -75,6 +75,26 @@ fn shows_decrypted_entry_as_json_with_passphrase_stdin() {
 }
 
 #[test]
+fn rejects_passphrase_command_line_argument() {
+    let store = password_store_with_entry("email/work.gpg");
+
+    rpass()
+        .args([
+            "--store-dir",
+            store.path().to_str().expect("store path"),
+            "show",
+            "--passphrase",
+            "not-a-real-secret",
+            "email/work",
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "unexpected argument '--passphrase'",
+        ));
+}
+
+#[test]
 fn reports_wrong_passphrase_as_json() {
     let store = password_store_with_entry("email/work.gpg");
     let gpg = passphrase_gpg_script(store.path(), "correct horse", "secret\n");
@@ -227,6 +247,6 @@ fn reports_passphrase_required_as_json() {
         .failure()
         .stdout("")
         .stderr(
-            "{\n  \"error\": {\n    \"code\": \"gpg_passphrase_required\",\n    \"message\": \"gpg requires a passphrase; use --passphrase to provide it\"\n  }\n}\n",
+            "{\n  \"error\": {\n    \"code\": \"gpg_passphrase_required\",\n    \"message\": \"gpg requires a passphrase; use --passphrase-stdin to provide it\"\n  }\n}\n",
         );
 }

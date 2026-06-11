@@ -73,9 +73,6 @@ struct ListCommand {
 struct ShowCommand {
     entry: String,
 
-    #[arg(long, conflicts_with = "passphrase_stdin")]
-    passphrase: Option<String>,
-
     #[arg(long)]
     passphrase_stdin: bool,
 
@@ -111,9 +108,6 @@ struct EditCommand {
 #[derive(Debug, Parser)]
 struct OtpCommand {
     entry: String,
-
-    #[arg(long, conflicts_with = "passphrase_stdin")]
-    passphrase: Option<String>,
 
     #[arg(long)]
     passphrase_stdin: bool,
@@ -217,7 +211,7 @@ fn search_entries(command: SearchCommand, store_directory: StoreDirectory) -> Re
 fn show_entry(command: ShowCommand, store_directory: StoreDirectory) -> Result<(), CliError> {
     let store = PasswordStore::open(store_directory)?;
     let gpg = GpgCommand::from_environment();
-    let passphrase = command_passphrase(command.passphrase, command.passphrase_stdin)?;
+    let passphrase = command_passphrase(command.passphrase_stdin)?;
     let output = ShowEntry::new(&store, &gpg).execute(&command.entry, passphrase.as_deref())?;
 
     if command.json {
@@ -281,7 +275,7 @@ fn edit_entry(command: EditCommand, store_directory: StoreDirectory) -> Result<(
 fn generate_otp(command: OtpCommand, store_directory: StoreDirectory) -> Result<(), CliError> {
     let store = PasswordStore::open(store_directory)?;
     let gpg = GpgCommand::from_environment();
-    let passphrase = command_passphrase(command.passphrase, command.passphrase_stdin)?;
+    let passphrase = command_passphrase(command.passphrase_stdin)?;
     let output = ShowEntry::new(&store, &gpg).execute(&command.entry, passphrase.as_deref())?;
     let otp = OtpCode::generate_at(&output.parsed, current_unix_timestamp()?)?;
 
@@ -387,12 +381,9 @@ fn command_stdin() -> Result<String, CliError> {
     Ok(input)
 }
 
-fn command_passphrase(
-    passphrase: Option<String>,
-    passphrase_stdin: bool,
-) -> Result<Option<String>, CliError> {
+fn command_passphrase(passphrase_stdin: bool) -> Result<Option<String>, CliError> {
     if !passphrase_stdin {
-        return Ok(passphrase);
+        return Ok(None);
     }
 
     let mut input = String::new();

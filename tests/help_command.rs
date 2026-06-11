@@ -25,3 +25,25 @@ fn prints_concise_root_help() {
         ))
         .stdout(predicate::str::contains("help  Print").not());
 }
+
+#[test]
+fn show_help_only_advertises_passphrase_stdin() {
+    Command::cargo_bin("rpass")
+        .expect("rpass binary")
+        .args(["show", "--help"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("--passphrase-stdin"))
+        .stdout(predicate::str::contains("--passphrase <").not());
+}
+
+#[test]
+fn otp_help_only_advertises_passphrase_stdin() {
+    Command::cargo_bin("rpass")
+        .expect("rpass binary")
+        .args(["otp", "--help"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("--passphrase-stdin"))
+        .stdout(predicate::str::contains("--passphrase <").not());
+}

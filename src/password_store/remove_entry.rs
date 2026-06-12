@@ -32,7 +32,7 @@ impl<'store> RemoveEntry<'store> {
     }
 }
 
-fn prune_empty_parent_directories(store_root: &Path, start: Option<&Path>) {
+pub(super) fn prune_empty_parent_directories(store_root: &Path, start: Option<&Path>) {
     let Some(mut directory) = start.map(PathBuf::from) else {
         return;
     };

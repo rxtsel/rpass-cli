@@ -13,8 +13,8 @@ use crate::password_generator::{
     max_passphrase_words, max_password_length,
 };
 use crate::password_store::{
-    DecryptedEntry, DoctorReport, EditEntry, GpgCommand, InsertEntry, ListEntries, OtpCode,
-    PasswordStore, RemoveEntry, SearchEntries, ShowEntry, StoreDirectory,
+    DecryptedEntry, DoctorReport, EditEntry, GpgCommand, InsertEntry, ListEntries, MoveEntry,
+    OtpCode, PasswordStore, RemoveEntry, SearchEntries, ShowEntry, StoreDirectory,
 };
 use tree_output::EntryTree;
 
@@ -67,6 +67,9 @@ enum Command {
 
     #[command(name = "rm", about = "Remove a password store entry")]
     Remove(RemoveCommand),
+
+    #[command(name = "mv", about = "Move or rename a password store entry")]
+    Move(MoveCommand),
 
     #[command(about = "Generate and insert a password store entry")]
     Generate(GenerateCommand),
@@ -126,6 +129,18 @@ struct EditCommand {
 #[derive(Debug, Parser)]
 struct RemoveCommand {
     entry: String,
+
+    #[arg(short = 'f', long)]
+    force: bool,
+
+    #[arg(long)]
+    json: bool,
+}
+
+#[derive(Debug, Parser)]
+struct MoveCommand {
+    old_entry: String,
+    new_entry: String,
 
     #[arg(short = 'f', long)]
     force: bool,
@@ -280,6 +295,7 @@ pub fn run() -> Result<(), CliError> {
         Some(Command::Insert(command)) => insert_entry(command, store_directory),
         Some(Command::Edit(command)) => edit_entry(command, store_directory),
         Some(Command::Remove(command)) => remove_entry(command, store_directory),
+        Some(Command::Move(command)) => move_entry(command, store_directory),
         Some(Command::Generate(command)) => generate_entry(command, store_directory),
         Some(Command::Otp(command)) => generate_otp(command, store_directory),
         Some(Command::Search(command)) => search_entries(command, store_directory),
@@ -326,6 +342,7 @@ impl Command {
             Self::Insert(command) => command.json,
             Self::Edit(command) => command.json,
             Self::Remove(command) => command.json,
+            Self::Move(command) => command.json,
             Self::Generate(command) => command.json,
             Self::Otp(command) => command.json,
             Self::Search(command) => command.json,
@@ -466,6 +483,31 @@ fn confirm_remove(command: &RemoveCommand) -> Result<(), CliError> {
     } else {
         Err(CliError::RemoveAborted)
     }
+}
+
+fn move_entry(command: MoveCommand, store_directory: StoreDirectory) -> Result<(), CliError> {
+    let store = PasswordStore::open(store_directory)?;
+    MoveEntry::new(&store).execute(&command.old_entry, &command.new_entry, command.force)?;
+
+    if command.json {
+        print_json_move(&command.old_entry, &command.new_entry)?;
+    } else {
+        println!(
+            "Entry '{}' moved to '{}'",
+            command.old_entry, command.new_entry
+        );
+    }
+
+    Ok(())
+}
+
+fn print_json_move(old_entry_name: &str, new_entry_name: &str) -> Result<(), CliError> {
+    let json = serde_json::to_string_pretty(&MoveJson {
+        old_name: old_entry_name,
+        new_name: new_entry_name,
+    })?;
+    println!("{json}");
+    Ok(())
 }
 
 fn generate_entry(
@@ -741,6 +783,12 @@ struct ShowEntryJson<'entry> {
 #[derive(Debug, Serialize)]
 struct InsertJson<'entry> {
     name: &'entry str,
+}
+
+#[derive(Debug, Serialize)]
+struct MoveJson<'entry> {
+    old_name: &'entry str,
+    new_name: &'entry str,
 }
 
 #[derive(Debug, Serialize)]

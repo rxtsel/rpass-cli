@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 This project uses [Conventional Commits](https://www.conventionalcommits.org/)
 and release automation with release-plz.
 
+## [0.1.4](https://github.com/rxtsel/rpass-cli/compare/v0.1.3...v0.1.4) - 2026-06-12
+
+### Added
+
+- Add `edit` support for creating and updating entries with `$EDITOR`.
+- Add `generate` support for random passwords and memorable passphrases.
+- Add `rpass <entry>` as a `pass`-compatible shorthand for `show`.
+
+### Fixed
+
+- Preserve existing encrypted entries if GPG encryption fails during writes.
+- Remove plaintext `--passphrase` arguments in favor of `--passphrase-stdin`.
+- Fix Windows editor handling for temporary edit files.
+
+### Documentation
+
+- Refresh README command examples and current feature scope.
+
+### Maintenance
+
+- Add dependency advisory checks to CI.
+- Update release metadata for the renamed `rpass-cli` package.
+
 ## [0.1.3](https://github.com/rxtsel/rpass/compare/v0.1.2...v0.1.3) - 2026-06-07
 
 ### Other

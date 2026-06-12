@@ -90,6 +90,10 @@ rpass otp example/login                       # generate an OTP code
 rpass doctor                                  # check local setup
 ```
 
+`generate` writes to the store by default. Use `--dry-run` to print a generated
+password or passphrase without opening the store, requiring `.gpg-id`, or calling
+GPG. Use `--length <N>` with `--dry-run` when no entry name is provided.
+
 `insert` prompts for a password and confirmation when run in an interactive
 terminal. Use `--echo` to show input, `--multiline` to read the full entry until
 EOF, and `--force` to overwrite an existing entry. In multiline mode, the first

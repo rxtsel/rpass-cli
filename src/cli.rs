@@ -151,7 +151,7 @@ struct MoveCommand {
 
 #[derive(Debug, Parser)]
 struct GenerateCommand {
-    entry: String,
+    entry: Option<String>,
 
     #[arg(
         value_name = "LENGTH",
@@ -252,10 +252,13 @@ struct GenerateCommand {
     )]
     symbols: Option<String>,
 
+    #[arg(long, help_heading = "Output options")]
+    dry_run: bool,
+
     #[arg(short = 'f', long, help_heading = "Write options")]
     force: bool,
 
-    #[arg(long, help_heading = "Write options")]
+    #[arg(long, help_heading = "Output options")]
     json: bool,
 }
 
@@ -516,15 +519,22 @@ fn generate_entry(
 ) -> Result<(), CliError> {
     validate_generate_command(&command)?;
 
-    let store = PasswordStore::open(store_directory)?;
-    let gpg = GpgCommand::from_environment();
     let password = generated_secret(&command)?;
-    let content = format!("{password}\n");
 
-    InsertEntry::new(&store, &gpg).execute(&command.entry, &content, command.force)?;
+    if !command.dry_run {
+        let entry = command
+            .entry
+            .as_deref()
+            .ok_or(CliError::GenerateEntryRequired)?;
+        let store = PasswordStore::open(store_directory)?;
+        let gpg = GpgCommand::from_environment();
+        let content = format!("{password}\n");
+
+        InsertEntry::new(&store, &gpg).execute(entry, &content, command.force)?;
+    }
 
     if command.json {
-        print_json_generate(&command.entry, &password)?;
+        print_json_generate(command.entry.as_deref(), &password, command.dry_run)?;
     } else {
         println!("{password}");
     }
@@ -533,6 +543,10 @@ fn generate_entry(
 }
 
 fn validate_generate_command(command: &GenerateCommand) -> Result<(), CliError> {
+    if command.entry.is_none() && !command.dry_run {
+        return Err(CliError::GenerateEntryRequired);
+    }
+
     if let Some(length) = command.length.or(command.length_option)
         && !(1..=max_password_length()).contains(&length)
     {
@@ -583,10 +597,15 @@ fn generated_secret(command: &GenerateCommand) -> Result<String, CliError> {
     .map_err(CliError::PasswordGenerator)
 }
 
-fn print_json_generate(entry_name: &str, password: &str) -> Result<(), CliError> {
+fn print_json_generate(
+    entry_name: Option<&str>,
+    password: &str,
+    dry_run: bool,
+) -> Result<(), CliError> {
     let json = serde_json::to_string_pretty(&GenerateJson {
         name: entry_name,
         password,
+        dry_run,
     })?;
     println!("{json}");
     Ok(())
@@ -793,8 +812,15 @@ struct MoveJson<'entry> {
 
 #[derive(Debug, Serialize)]
 struct GenerateJson<'entry> {
-    name: &'entry str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    name: Option<&'entry str>,
     password: &'entry str,
+    #[serde(skip_serializing_if = "is_false")]
+    dry_run: bool,
+}
+
+fn is_false(value: &bool) -> bool {
+    !value
 }
 
 #[derive(Debug, Serialize)]
@@ -845,6 +871,9 @@ pub enum CliError {
     #[error("passphrase word count must be between {min} and {max}")]
     InvalidGenerateWordCount { min: usize, max: usize },
 
+    #[error("entry is required unless --dry-run is used")]
+    GenerateEntryRequired,
+
     #[error("password confirmation did not match")]
     PasswordConfirmationMismatch,
 
@@ -882,6 +911,7 @@ impl CliError {
             Self::PasswordGenerator(_) => "password_generation_failed",
             Self::InvalidGenerateLength { .. } => "invalid_generate_length",
             Self::InvalidGenerateWordCount { .. } => "invalid_generate_word_count",
+            Self::GenerateEntryRequired => "generate_entry_required",
             Self::PasswordConfirmationMismatch => "password_confirmation_mismatch",
             Self::RemoveConfirmationRequired => "remove_confirmation_required",
             Self::RemoveAborted => "remove_aborted",

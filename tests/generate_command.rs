@@ -194,6 +194,110 @@ fn generates_memorable_passphrase() {
 }
 
 #[test]
+fn dry_run_generates_password_without_store_or_gpg() {
+    let temp_dir = tempfile::TempDir::new().expect("temp dir");
+    let missing_store = temp_dir.path().join("missing-store");
+
+    let assert = rpass()
+        .args([
+            "--store-dir",
+            missing_store.to_str().expect("store path"),
+            "generate",
+            "--dry-run",
+            "--length",
+            "20",
+        ])
+        .assert()
+        .success()
+        .stderr("");
+    let generated = stdout_line(&assert);
+
+    assert_eq!(generated.chars().count(), 20);
+    assert!(!missing_store.exists());
+}
+
+#[test]
+fn dry_run_generates_passphrase_without_entry() {
+    let assert = rpass()
+        .args([
+            "generate",
+            "--dry-run",
+            "--phrase",
+            "--words",
+            "4",
+            "--separator",
+            "_",
+        ])
+        .assert()
+        .success()
+        .stderr("");
+    let generated = stdout_line(&assert);
+
+    assert_eq!(generated.split('_').count(), 4);
+}
+
+#[test]
+fn dry_run_json_omits_name_when_entry_is_not_provided() {
+    let assert = rpass()
+        .args(["generate", "--dry-run", "--length", "18", "--json"])
+        .assert()
+        .success()
+        .stderr("");
+    let output: Value = serde_json::from_slice(&assert.get_output().stdout).expect("json");
+
+    assert_eq!(
+        output["password"]
+            .as_str()
+            .expect("password")
+            .chars()
+            .count(),
+        18
+    );
+    assert_eq!(output["dry_run"], true);
+    assert!(output.get("name").is_none());
+}
+
+#[test]
+fn dry_run_json_includes_name_when_entry_is_provided() {
+    let assert = rpass()
+        .args([
+            "generate",
+            "example/login",
+            "--dry-run",
+            "--length",
+            "18",
+            "--json",
+        ])
+        .assert()
+        .success()
+        .stderr("");
+    let output: Value = serde_json::from_slice(&assert.get_output().stdout).expect("json");
+
+    assert_eq!(output["name"], "example/login");
+    assert_eq!(
+        output["password"]
+            .as_str()
+            .expect("password")
+            .chars()
+            .count(),
+        18
+    );
+    assert_eq!(output["dry_run"], true);
+}
+
+#[test]
+fn requires_entry_without_dry_run() {
+    rpass()
+        .args(["generate", "--length", "18"])
+        .assert()
+        .failure()
+        .stdout("")
+        .stderr(predicate::str::contains(
+            "entry is required unless --dry-run is used",
+        ));
+}
+
+#[test]
 fn reports_empty_character_set_as_json() {
     let store = tempfile::TempDir::new().expect("temp dir");
     fs::write(store.path().join(".gpg-id"), "alice@example.invalid\n").expect("gpg id");

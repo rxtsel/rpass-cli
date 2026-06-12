@@ -138,54 +138,109 @@ struct RemoveCommand {
 struct GenerateCommand {
     entry: String,
 
-    #[arg(value_name = "LENGTH", conflicts_with_all = ["length_option", "phrase"])]
+    #[arg(
+        value_name = "LENGTH",
+        conflicts_with_all = ["length_option", "phrase"],
+        help = "Password length"
+    )]
     length: Option<usize>,
 
     #[arg(
         short = 'l',
         long = "length",
         value_name = "LENGTH",
-        conflicts_with = "phrase"
+        conflicts_with = "phrase",
+        help_heading = "Password options",
+        help = "Password length"
     )]
     length_option: Option<usize>,
 
     #[arg(
         long,
+        help_heading = "Passphrase options",
         help = "Generate a memorable passphrase instead of a random password"
     )]
     phrase: bool,
 
-    #[arg(long, default_value_t = default_passphrase_words(), requires = "phrase")]
+    #[arg(
+        long,
+        default_value_t = default_passphrase_words(),
+        requires = "phrase",
+        help_heading = "Passphrase options",
+        help = "Number of words for --phrase"
+    )]
     words: usize,
 
-    #[arg(long, default_value = default_passphrase_separator(), requires = "phrase")]
+    #[arg(
+        long,
+        default_value = default_passphrase_separator(),
+        requires = "phrase",
+        help_heading = "Passphrase options",
+        help = "Separator between words for --phrase"
+    )]
     separator: String,
 
-    #[arg(long, requires = "phrase")]
+    #[arg(
+        long,
+        requires = "phrase",
+        help_heading = "Passphrase options",
+        help = "Capitalize words for --phrase"
+    )]
     capitalize: bool,
 
-    #[arg(long, requires = "phrase")]
+    #[arg(
+        long,
+        requires = "phrase",
+        help_heading = "Passphrase options",
+        help = "Append a number for --phrase"
+    )]
     number: bool,
 
-    #[arg(long, conflicts_with = "phrase")]
+    #[arg(
+        long,
+        conflicts_with = "phrase",
+        help_heading = "Password options",
+        help = "Exclude lowercase letters"
+    )]
     no_lowercase: bool,
 
-    #[arg(long, conflicts_with = "phrase")]
+    #[arg(
+        long,
+        conflicts_with = "phrase",
+        help_heading = "Password options",
+        help = "Exclude uppercase letters"
+    )]
     no_uppercase: bool,
 
-    #[arg(long, conflicts_with = "phrase")]
+    #[arg(
+        long,
+        conflicts_with = "phrase",
+        help_heading = "Password options",
+        help = "Exclude numbers"
+    )]
     no_numbers: bool,
 
-    #[arg(long, conflicts_with_all = ["phrase", "symbols"])]
+    #[arg(
+        long,
+        conflicts_with_all = ["phrase", "symbols"],
+        help_heading = "Password options",
+        help = "Exclude symbols"
+    )]
     no_symbols: bool,
 
-    #[arg(long, value_name = "CHARS", conflicts_with = "phrase")]
+    #[arg(
+        long,
+        value_name = "CHARS",
+        conflicts_with = "phrase",
+        help_heading = "Password options",
+        help = "Symbols allowed in generated passwords"
+    )]
     symbols: Option<String>,
 
-    #[arg(short = 'f', long)]
+    #[arg(short = 'f', long, help_heading = "Write options")]
     force: bool,
 
-    #[arg(long)]
+    #[arg(long, help_heading = "Write options")]
     json: bool,
 }
 

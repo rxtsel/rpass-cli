@@ -9,7 +9,11 @@ git_tag_name = "v{{ version }}"
 pr_labels = ["release"]
 publish = false
 release_always = false
-semver_check = true
+# The package was renamed from `rpass` to `rpass-cli` after the v0.1.3 tag.
+# cargo-semver-checks cannot compare the renamed package against older tags.
+# This project exposes a CLI, so release automation relies on Conventional
+# Commits rather than Rust library API semver checks.
+semver_check = false
 
 [[package]]
 name = "rpass-cli"

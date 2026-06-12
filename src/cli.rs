@@ -14,7 +14,7 @@ use crate::password_generator::{
 };
 use crate::password_store::{
     DecryptedEntry, DoctorReport, EditEntry, GpgCommand, InsertEntry, ListEntries, OtpCode,
-    PasswordStore, SearchEntries, ShowEntry, StoreDirectory,
+    PasswordStore, RemoveEntry, SearchEntries, ShowEntry, StoreDirectory,
 };
 use tree_output::EntryTree;
 
@@ -64,6 +64,9 @@ enum Command {
 
     #[command(about = "Edit a password store entry")]
     Edit(EditCommand),
+
+    #[command(name = "rm", about = "Remove a password store entry")]
+    Remove(RemoveCommand),
 
     #[command(about = "Generate and insert a password store entry")]
     Generate(GenerateCommand),
@@ -115,6 +118,17 @@ struct InsertCommand {
 #[derive(Debug, Parser)]
 struct EditCommand {
     entry: String,
+
+    #[arg(long)]
+    json: bool,
+}
+
+#[derive(Debug, Parser)]
+struct RemoveCommand {
+    entry: String,
+
+    #[arg(short = 'f', long)]
+    force: bool,
 
     #[arg(long)]
     json: bool,
@@ -210,6 +224,7 @@ pub fn run() -> Result<(), CliError> {
         Some(Command::Show(command)) => show_entry(command, store_directory),
         Some(Command::Insert(command)) => insert_entry(command, store_directory),
         Some(Command::Edit(command)) => edit_entry(command, store_directory),
+        Some(Command::Remove(command)) => remove_entry(command, store_directory),
         Some(Command::Generate(command)) => generate_entry(command, store_directory),
         Some(Command::Otp(command)) => generate_otp(command, store_directory),
         Some(Command::Search(command)) => search_entries(command, store_directory),
@@ -255,6 +270,7 @@ impl Command {
             Self::Show(command) => command.json,
             Self::Insert(command) => command.json,
             Self::Edit(command) => command.json,
+            Self::Remove(command) => command.json,
             Self::Generate(command) => command.json,
             Self::Otp(command) => command.json,
             Self::Search(command) => command.json,
@@ -362,6 +378,39 @@ fn edit_entry(command: EditCommand, store_directory: StoreDirectory) -> Result<(
     }
 
     Ok(())
+}
+
+fn remove_entry(command: RemoveCommand, store_directory: StoreDirectory) -> Result<(), CliError> {
+    confirm_remove(&command)?;
+
+    let store = PasswordStore::open(store_directory)?;
+    RemoveEntry::new(&store).execute(&command.entry)?;
+
+    if command.json {
+        print_json_insert(&command.entry)?;
+    } else {
+        println!("Entry '{}' removed", command.entry);
+    }
+
+    Ok(())
+}
+
+fn confirm_remove(command: &RemoveCommand) -> Result<(), CliError> {
+    if command.force {
+        return Ok(());
+    }
+
+    if !std::io::stdin().is_terminal() {
+        return Err(CliError::RemoveConfirmationRequired);
+    }
+
+    let confirmation = prompt_line(&format!("Remove '{}'? [y/N] ", command.entry))?;
+
+    if matches!(confirmation.as_str(), "y" | "Y" | "yes" | "YES") {
+        Ok(())
+    } else {
+        Err(CliError::RemoveAborted)
+    }
 }
 
 fn generate_entry(
@@ -696,6 +745,14 @@ pub enum CliError {
     #[error("password confirmation did not match")]
     PasswordConfirmationMismatch,
 
+    #[error(
+        "refusing to remove entry without confirmation; use --force to remove non-interactively"
+    )]
+    RemoveConfirmationRequired,
+
+    #[error("remove aborted")]
+    RemoveAborted,
+
     #[error("doctor checks failed")]
     DoctorFailed,
 
@@ -723,6 +780,8 @@ impl CliError {
             Self::InvalidGenerateLength { .. } => "invalid_generate_length",
             Self::InvalidGenerateWordCount { .. } => "invalid_generate_word_count",
             Self::PasswordConfirmationMismatch => "password_confirmation_mismatch",
+            Self::RemoveConfirmationRequired => "remove_confirmation_required",
+            Self::RemoveAborted => "remove_aborted",
             Self::DoctorFailed => "doctor_checks_failed",
             Self::Reported => "reported",
             Self::NoEntryPoint => "no_entry_or_subcommand_provided",

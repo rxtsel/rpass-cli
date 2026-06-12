@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 This project uses [Conventional Commits](https://www.conventionalcommits.org/)
 and release automation with release-plz.
 
+## [0.1.5](https://github.com/rxtsel/rpass-cli/compare/v0.1.4...v0.1.5) - 2026-06-12
+
+### 🚀 Features
+
+- *(cli)* Add rm command
+
+
+
 ## [0.1.4](https://github.com/rxtsel/rpass-cli/compare/v0.1.3...v0.1.4) - 2026-06-12
 
 ### Added

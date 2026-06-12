@@ -41,15 +41,24 @@ impl EntryName {
     }
 
     pub fn encrypted_file_path(&self, store_root: &Path) -> PathBuf {
-        let mut path = store_root.to_path_buf();
-        let segments = self.0.split('/').collect::<Vec<_>>();
+        let mut path = self.directory_path(store_root);
+        let file_name = format!(
+            "{}.gpg",
+            path.file_name()
+                .expect("validated entry segment")
+                .to_string_lossy()
+        );
+        path.set_file_name(file_name);
+        path
+    }
 
-        for segment in &segments[..segments.len() - 1] {
+    pub fn directory_path(&self, store_root: &Path) -> PathBuf {
+        let mut path = store_root.to_path_buf();
+
+        for segment in self.0.split('/') {
             path.push(segment);
         }
 
-        let file_name = format!("{}.gpg", segments.last().expect("validated entry segment"));
-        path.push(file_name);
         path
     }
 

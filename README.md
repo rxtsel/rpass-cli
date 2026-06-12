@@ -77,21 +77,17 @@ are intentionally not implemented yet.
 ## Commands
 
 ```bash
-rpass -h                            # show help
-rpass list                          # list entries
-rpass search example                # search entries
-rpass example/login                 # show an entry, pass-compatible shorthand
-rpass show example/login            # show an entry explicitly
-rpass generate example/login        # generate and save a 14-character password
-rpass generate example/login --phrase  # generate and save a memorable passphrase
-rpass insert example/login          # insert a password interactively
-printf 'dummy-password\nusername: demo\n' | rpass insert --multiline example/login
-rpass insert --force example/login  # overwrite an entry
-rpass edit example/login            # edit or create an entry
-rpass rm --force example/login      # remove an entry
-rpass mv example/login archive/login # move or rename an entry
-rpass otp example/login             # generate an OTP code
-rpass doctor                        # check local setup
+rpass -h                                      # show help
+rpass list                                    # list entries
+rpass search example                          # search entries
+rpass show example/login                      # show an entry explicitly
+rpass generate example/login                  # generate and save a 14-character password
+rpass insert example/login                    # insert a password interactively
+rpass edit example/login                      # edit or create an entry
+rpass rm example/login                        # remove an entry
+rpass mv example/login archive/login          # move or rename an entry
+rpass otp example/login                       # generate an OTP code
+rpass doctor                                  # check local setup
 ```
 
 `insert` prompts for a password and confirmation when run in an interactive

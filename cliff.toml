@@ -1,0 +1,39 @@
+[changelog]
+header = """# Changelog
+
+All notable changes to this project will be documented in this file.
+
+This project uses [Conventional Commits](https://www.conventionalcommits.org/)
+and release automation with release-plz.
+"""
+body = """
+{% if version %}\
+    {% if previous.version %}\
+        ## [{{ version }}]({{ release_link }}) - {{ timestamp | date(format="%Y-%m-%d") }}
+    {% else %}\
+        ## [{{ version }}] - {{ timestamp | date(format="%Y-%m-%d") }}
+    {% endif %}\
+{% endif %}\
+{% for group, commits in commits | group_by(attribute="group") %}
+### {{ group | striptags | trim | upper_first }}
+{% for commit in commits %}
+- {% if commit.scope %}*({{ commit.scope }})* {% endif %}{{ commit.message | upper_first }}
+{% endfor %}
+{% endfor %}\n
+"""
+trim = true
+
+commit_parsers = [
+  { message = "^feat", group = "added" },
+  { message = "^fix", group = "fixed" },
+  { message = "^perf", group = "performance" },
+  { message = "^docs?", group = "documentation" },
+  { message = "^test", group = "testing" },
+  { message = "^refactor", group = "refactoring" },
+  { message = "^build", group = "build" },
+  { message = "^ci", group = "maintenance" },
+  { message = '^chore\(release\):', skip = true },
+  { message = "^chore: release", skip = true },
+  { message = "^chore", group = "maintenance" },
+  { message = "^revert", group = "reverted" },
+]

@@ -67,11 +67,12 @@ The crates.io package is `rpass-cli`; the installed binary is `rpass`.
 
 ## Status
 
-`rpass` can list, search, show, insert, and edit password-store entries using
-external GnuPG. It also supports TOTP generation from `otpauth://` lines.
+`rpass` can list, search, show, generate, insert, and edit password-store
+entries using external GnuPG. It also supports TOTP generation from
+`otpauth://` lines.
 
-Commands such as `generate`, `rm`, `mv`, Git integration, clipboard support,
-and store initialization are intentionally not implemented yet.
+Commands such as `rm`, `mv`, Git integration, clipboard support, and store
+initialization are intentionally not implemented yet.
 
 ## Commands
 
@@ -81,6 +82,8 @@ rpass list                          # list entries
 rpass search example                # search entries
 rpass example/login                 # show an entry, pass-compatible shorthand
 rpass show example/login            # show an entry explicitly
+rpass generate example/login        # generate and save a 14-character password
+rpass generate example/login --phrase  # generate and save a memorable passphrase
 rpass insert example/login          # insert a password interactively
 printf 'dummy-password\nusername: demo\n' | rpass insert --multiline example/login
 rpass insert --force example/login  # overwrite an entry
@@ -136,8 +139,8 @@ Supported behavior:
 
 Known differences from `pass`:
 
-- write support is limited to `insert` and `edit`;
-- shell completion, clipboard, QR code, Git, `generate`, `rm`, `mv`, and store
+- write support is limited to `generate`, `insert`, and `edit`;
+- shell completion, clipboard, QR code, Git, `rm`, `mv`, and store
   initialization are not implemented;
 - unsupported `pass` flags are rejected instead of ignored;
 - JSON output is an `rpass` integration contract, not part of the original

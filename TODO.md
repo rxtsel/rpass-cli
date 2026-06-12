@@ -107,7 +107,7 @@ Android Password Store, and existing Git-based stores.
 
 - [x] `rpass insert <entry>`
 - [x] `rpass edit <entry>`
-- [ ] `rpass generate <entry> <length>`
+- [x] `rpass generate <entry> <length>`
 - [ ] `rpass rm <entry>`
 - [ ] `rpass mv <old-entry> <new-entry>`
 - [x] Resolve recipients from the nearest `.gpg-id`.

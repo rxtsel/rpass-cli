@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 This project uses [Conventional Commits](https://www.conventionalcommits.org/)
 and release automation with release-plz.
 
+## [0.1.6](https://github.com/rxtsel/rpass-cli/compare/v0.1.5...v0.1.6) - 2026-06-12
+
+### 📚 Documentation
+
+- *(cli)* Group generate help options
+
+
+### ⚙️ Miscellaneous Tasks
+
+- Move dependency audit to dedicated workflow
+
+
+
 ## [0.1.5](https://github.com/rxtsel/rpass-cli/compare/v0.1.4...v0.1.5) - 2026-06-12
 
 ### 🚀 Features

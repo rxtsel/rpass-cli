@@ -4,7 +4,7 @@ version = "0.1.1"
 edition = "2024"
 authors = ["rxtsel"]
 description = "Native password-store compatible backend"
-repository = "https://github.com/rxtsel/rpass"
+repository = "https://github.com/rxtsel/rpass-cli"
 
 [package.metadata.wix]
 upgrade-guid = "694EFC21-7422-4882-912D-65A6F84315EC"

@@ -162,8 +162,35 @@ Known differences from `pass`:
 
 - write support is limited to `generate`, `insert`, `edit`, `rm`, and `mv`;
 - Git integration is explicit through `rpass git <args...>`;
-- changing recipients with `init` does not re-encrypt existing entries yet;
+- changing recipients with `init` or `recipients` does not re-encrypt existing
+  entries yet;
 - shell completion, clipboard, and QR code are not implemented;
 - unsupported `pass` flags are rejected instead of ignored;
 - JSON output is an `rpass` integration contract, not part of the original
   `pass` CLI.
+
+`pass` compatibility matrix:
+
+| Supported? | `pass` feature |
+| --- | --- |
+| [x] | `show`, including default `rpass <entry>` shorthand |
+| [x] | `list` / `ls` equivalent through `rpass list` |
+| [x] | `find` / `search` equivalent through `rpass search` |
+| [x] | `insert` / `add` equivalent through `rpass insert` |
+| [x] | `edit` |
+| [x] | `generate <entry> <length>` |
+| [x] | `rm` / `remove` equivalent through `rpass rm` |
+| [x] | `mv` / `rename` equivalent through `rpass mv` |
+| [x] | `git <args...>` passthrough and `git init` initial commit behavior |
+| [x] | Directory-level `.gpg-id` recipient lookup |
+| [x] | TOTP from `otpauth://` lines through `rpass otp` |
+| [ ] | `show --clip`, `show -c`, `show --qrcode`, `show -q` |
+| [ ] | `generate --clip`, `generate -c`, `generate --qrcode`, `generate -q` |
+| [ ] | `generate --in-place`, `generate -i` |
+| [ ] | `rm --recursive`, `rm -r` |
+| [ ] | `cp` / `copy` |
+| [ ] | Re-encrypting moved entries for destination-specific recipients |
+| [ ] | Re-encrypting existing entries after `init` or recipient changes |
+| [ ] | Password-store shell extensions |
+| [ ] | `.gpg-id` signature verification with `PASSWORD_STORE_SIGNING_KEY` |
+| [ ] | `PASSWORD_STORE_KEY`, `PASSWORD_STORE_GPG_OPTS`, `PASSWORD_STORE_GENERATED_LENGTH`, and password-store clipboard environment variables |

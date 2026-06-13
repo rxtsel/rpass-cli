@@ -87,6 +87,15 @@ pub enum PasswordStoreError {
     #[error("gpg executable was not found; install GnuPG 2.x or set PASSWORD_STORE_GPG")]
     GpgNotFound,
 
+    #[error("git executable was not found; install Git or set PASSWORD_STORE_GIT")]
+    GitNotFound,
+
+    #[error("password store is not a git repository; run `rpass git init` first")]
+    GitRepositoryNotFound,
+
+    #[error("git failed with exit code {exit_code}: {stderr}")]
+    GitFailed { exit_code: i32, stderr: String },
+
     #[error("gpg requires a passphrase; use --passphrase-stdin to provide it")]
     GpgPassphraseRequired,
 
@@ -130,6 +139,9 @@ impl PasswordStoreError {
             Self::EditorFailed(_) => "editor_failed",
             Self::InvalidEntryName { .. } => "invalid_entry_name",
             Self::GpgNotFound => "gpg_not_found",
+            Self::GitNotFound => "git_not_found",
+            Self::GitRepositoryNotFound => "git_repository_not_found",
+            Self::GitFailed { .. } => "git_failed",
             Self::GpgPassphraseRequired => "gpg_passphrase_required",
             Self::GpgIdNotFound => "gpg_id_not_found",
             Self::GpgDecryptFailed(_) => "gpg_decrypt_failed",

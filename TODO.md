@@ -131,7 +131,7 @@ Goal: provide explicit, predictable Git commands for password-store workflows.
 
 Goal: support creation and maintenance of password-store compatible stores.
 
-- [ ] `rpass init <key-id>`
+- [x] `rpass init <key-id>`
 - [ ] `rpass recipients`
 - [ ] `rpass recipients add <key-id>`
 - [ ] `rpass recipients remove <key-id>`

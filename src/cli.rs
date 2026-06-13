@@ -13,8 +13,9 @@ use crate::password_generator::{
     max_passphrase_words, max_password_length,
 };
 use crate::password_store::{
-    DecryptedEntry, DoctorReport, EditEntry, GitCommand, GpgCommand, InsertEntry, ListEntries,
-    MoveEntry, OtpCode, PasswordStore, RemoveEntry, SearchEntries, ShowEntry, StoreDirectory,
+    DecryptedEntry, DoctorReport, EditEntry, GitCommand, GpgCommand, InitStore, InitStoreResult,
+    InsertEntry, ListEntries, MoveEntry, OtpCode, PasswordStore, RemoveEntry, SearchEntries,
+    ShowEntry, StoreDirectory,
 };
 use tree_output::EntryTree;
 
@@ -59,6 +60,9 @@ enum Command {
     #[command(about = "Show a password store entry")]
     Show(ShowCommand),
 
+    #[command(about = "Initialize a password store or subfolder")]
+    Init(InitCommand),
+
     #[command(about = "Insert a password store entry")]
     Insert(InsertCommand),
 
@@ -102,6 +106,18 @@ struct ShowCommand {
 
     #[arg(long)]
     json: bool,
+}
+
+#[derive(Debug, Parser)]
+struct InitCommand {
+    #[arg(short = 'p', long = "path", value_name = "SUBFOLDER")]
+    path: Option<String>,
+
+    #[arg(long)]
+    json: bool,
+
+    #[arg(value_name = "GPG-ID", required = true)]
+    gpg_ids: Vec<String>,
 }
 
 #[derive(Debug, Parser)]
@@ -307,6 +323,7 @@ pub fn run() -> Result<(), CliError> {
     let result = match cli.command {
         Some(Command::List(command)) => list_entries(command, store_directory),
         Some(Command::Show(command)) => show_entry(command, store_directory),
+        Some(Command::Init(command)) => init_store(command, store_directory),
         Some(Command::Insert(command)) => insert_entry(command, store_directory),
         Some(Command::Edit(command)) => edit_entry(command, store_directory),
         Some(Command::Remove(command)) => remove_entry(command, store_directory),
@@ -355,6 +372,7 @@ impl Command {
         match self {
             Self::List(command) => command.json,
             Self::Show(command) => command.json,
+            Self::Init(command) => command.json,
             Self::Insert(command) => command.json,
             Self::Edit(command) => command.json,
             Self::Remove(command) => command.json,
@@ -390,6 +408,84 @@ fn print_json_entries(entries: &[String]) -> Result<(), CliError> {
     let json = serde_json::to_string_pretty(entries)?;
     println!("{json}");
     Ok(())
+}
+
+fn init_store(command: InitCommand, store_directory: StoreDirectory) -> Result<(), CliError> {
+    validate_init_path(command.path.as_deref())?;
+
+    let result = InitStore::new(store_directory.clone())
+        .execute(command.path.as_deref(), &command.gpg_ids)?;
+    let store = PasswordStore::open(store_directory)?;
+    auto_commit(&store, &init_commit_message(&command, &result))?;
+
+    if command.json {
+        print_json_init(&result)?;
+    } else if result.removed {
+        print_init_removed(&command);
+    } else {
+        print_init_success(&command);
+    }
+
+    Ok(())
+}
+
+fn validate_init_path(path: Option<&str>) -> Result<(), CliError> {
+    let Some(path) = path else {
+        return Ok(());
+    };
+
+    if path.is_empty()
+        || path.contains('\\')
+        || path.split('/').any(|segment| segment.is_empty())
+        || path.split('/').any(|segment| matches!(segment, "." | ".."))
+    {
+        return Err(CliError::InvalidInitPath(path.to_owned()));
+    }
+
+    Ok(())
+}
+
+fn init_commit_message(command: &InitCommand, result: &InitStoreResult) -> String {
+    if result.removed {
+        match command.path.as_deref() {
+            Some(path) => format!("Removed GPG id from {path}."),
+            None => "Removed GPG id from store.".to_string(),
+        }
+    } else {
+        format!("Set GPG id to {}.", command.gpg_ids.join(", "))
+    }
+}
+
+fn print_json_init(result: &InitStoreResult) -> Result<(), CliError> {
+    let json = serde_json::to_string_pretty(&InitJson {
+        path: &normalize_path(&result.gpg_id_path),
+        recipients: &result.recipients,
+        removed: result.removed,
+    })?;
+    println!("{json}");
+    Ok(())
+}
+
+fn print_init_success(command: &InitCommand) {
+    let recipients = command.gpg_ids.join(", ");
+    match command.path.as_deref() {
+        Some(path) => println!("Password store initialized for {recipients} ({path})"),
+        None => println!("Password store initialized for {recipients}"),
+    }
+}
+
+fn print_init_removed(command: &InitCommand) {
+    match command.path.as_deref() {
+        Some(path) => println!("Password store recipients removed ({path})"),
+        None => println!("Password store recipients removed"),
+    }
+}
+
+fn normalize_path(path: &std::path::Path) -> String {
+    path.components()
+        .map(|component| component.as_os_str().to_string_lossy())
+        .collect::<Vec<_>>()
+        .join("/")
 }
 
 fn search_entries(command: SearchCommand, store_directory: StoreDirectory) -> Result<(), CliError> {
@@ -849,6 +945,13 @@ struct ShowEntryJson<'entry> {
 }
 
 #[derive(Debug, Serialize)]
+struct InitJson<'entry> {
+    path: &'entry str,
+    recipients: &'entry [String],
+    removed: bool,
+}
+
+#[derive(Debug, Serialize)]
 struct InsertJson<'entry> {
     name: &'entry str,
 }
@@ -920,6 +1023,9 @@ pub enum CliError {
     #[error("passphrase word count must be between {min} and {max}")]
     InvalidGenerateWordCount { min: usize, max: usize },
 
+    #[error("invalid init path '{0}'")]
+    InvalidInitPath(String),
+
     #[error("entry is required unless --dry-run is used")]
     GenerateEntryRequired,
 
@@ -960,6 +1066,7 @@ impl CliError {
             Self::PasswordGenerator(_) => "password_generation_failed",
             Self::InvalidGenerateLength { .. } => "invalid_generate_length",
             Self::InvalidGenerateWordCount { .. } => "invalid_generate_word_count",
+            Self::InvalidInitPath(_) => "invalid_init_path",
             Self::GenerateEntryRequired => "generate_entry_required",
             Self::PasswordConfirmationMismatch => "password_confirmation_mismatch",
             Self::RemoveConfirmationRequired => "remove_confirmation_required",

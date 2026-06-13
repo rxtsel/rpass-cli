@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 This project uses [Conventional Commits](https://www.conventionalcommits.org/)
 and release automation with release-plz.
 
+## [0.1.10](https://github.com/rxtsel/rpass-cli/compare/v0.1.9...v0.1.10) - 2026-06-13
+
+### 🚀 Features
+
+- *(cli)* Add pass-compatible git command
+
+- *(cli)* Auto-commit store writes
+
+
+### 🐛 Bug Fixes
+
+- *(cli)* Allow git init on empty stores
+
+
+
 ## [0.1.9](https://github.com/rxtsel/rpass-cli/compare/v0.1.8...v0.1.9) - 2026-06-12
 
 ### 🚀 Features

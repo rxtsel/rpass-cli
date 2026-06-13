@@ -788,7 +788,7 @@ checksum = "7a2d987857b319362043e95f5353c0535c1f58eec5336fdfcf626430af7def58"
 
 [[package]]
 name = "rpass-cli"
-version = "0.1.9"
+version = "0.1.10"
 dependencies = [
  "assert_cmd",
  "clap",

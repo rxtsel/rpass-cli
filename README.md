@@ -70,12 +70,11 @@ The crates.io package is `rpass-cli`; the installed binary is `rpass`.
 
 ## Status
 
-`rpass` can list, search, show, generate, insert, edit, remove, move, and run
-Git commands for password-store entries using external GnuPG. It also supports
-TOTP generation from `otpauth://` lines.
+`rpass` can initialize, list, search, show, generate, insert, edit, remove,
+move, and run Git commands for password-store entries using external GnuPG. It
+also supports TOTP generation from `otpauth://` lines.
 
-Commands such as clipboard support and store initialization are intentionally
-not implemented yet.
+Commands such as clipboard support are intentionally not implemented yet.
 
 ## Commands
 
@@ -84,6 +83,7 @@ rpass -h                                      # show help
 rpass list                                    # list entries
 rpass search example                          # search entries
 rpass show example/login                      # show an entry explicitly
+rpass init alice@example.com                  # initialize .gpg-id recipients
 rpass generate example/login                  # generate and save a 14-character password
 rpass insert example/login                    # insert a password interactively
 rpass edit example/login                      # edit or create an entry
@@ -94,6 +94,9 @@ rpass git init                                # initialize store Git history
 rpass otp example/login                       # generate an OTP code
 rpass doctor                                  # check local setup
 ```
+
+`init` creates the store if needed and writes `.gpg-id` recipients. Use
+`--path <subfolder>` or `-p <subfolder>` for directory-level recipients.
 
 `generate` writes to the store by default. Use `--dry-run` to print a generated
 password or passphrase without opening the store, requiring `.gpg-id`, or calling
@@ -154,8 +157,8 @@ Known differences from `pass`:
 
 - write support is limited to `generate`, `insert`, `edit`, `rm`, and `mv`;
 - Git integration is explicit through `rpass git <args...>`;
-- shell completion, clipboard, QR code, and store initialization are not
-  implemented;
+- changing recipients with `init` does not re-encrypt existing entries yet;
+- shell completion, clipboard, and QR code are not implemented;
 - unsupported `pass` flags are rejected instead of ignored;
 - JSON output is an `rpass` integration contract, not part of the original
   `pass` CLI.

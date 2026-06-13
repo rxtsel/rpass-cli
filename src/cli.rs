@@ -14,8 +14,8 @@ use crate::password_generator::{
 };
 use crate::password_store::{
     DecryptedEntry, DoctorReport, EditEntry, GitCommand, GpgCommand, InitStore, InitStoreResult,
-    InsertEntry, ListEntries, MoveEntry, OtpCode, PasswordStore, RemoveEntry, SearchEntries,
-    ShowEntry, StoreDirectory,
+    InsertEntry, ListEntries, MoveEntry, OtpCode, PasswordStore, Recipients, RecipientsResult,
+    RemoveEntry, SearchEntries, ShowEntry, StoreDirectory,
 };
 use tree_output::EntryTree;
 
@@ -62,6 +62,9 @@ enum Command {
 
     #[command(about = "Initialize a password store or subfolder")]
     Init(InitCommand),
+
+    #[command(about = "List or modify password store recipients")]
+    Recipients(RecipientsCommand),
 
     #[command(about = "Insert a password store entry")]
     Insert(InsertCommand),
@@ -118,6 +121,27 @@ struct InitCommand {
 
     #[arg(value_name = "GPG-ID", required = true)]
     gpg_ids: Vec<String>,
+}
+
+#[derive(Debug, Parser)]
+struct RecipientsCommand {
+    #[arg(short = 'p', long = "path", value_name = "SUBFOLDER")]
+    path: Option<String>,
+
+    #[arg(long)]
+    json: bool,
+
+    #[command(subcommand)]
+    action: Option<RecipientsAction>,
+}
+
+#[derive(Debug, Subcommand)]
+enum RecipientsAction {
+    #[command(about = "Add a recipient to .gpg-id")]
+    Add { key_id: String },
+
+    #[command(about = "Remove a recipient from .gpg-id")]
+    Remove { key_id: String },
 }
 
 #[derive(Debug, Parser)]
@@ -324,6 +348,7 @@ pub fn run() -> Result<(), CliError> {
         Some(Command::List(command)) => list_entries(command, store_directory),
         Some(Command::Show(command)) => show_entry(command, store_directory),
         Some(Command::Init(command)) => init_store(command, store_directory),
+        Some(Command::Recipients(command)) => recipients(command, store_directory),
         Some(Command::Insert(command)) => insert_entry(command, store_directory),
         Some(Command::Edit(command)) => edit_entry(command, store_directory),
         Some(Command::Remove(command)) => remove_entry(command, store_directory),
@@ -373,6 +398,7 @@ impl Command {
             Self::List(command) => command.json,
             Self::Show(command) => command.json,
             Self::Init(command) => command.json,
+            Self::Recipients(command) => command.json,
             Self::Insert(command) => command.json,
             Self::Edit(command) => command.json,
             Self::Remove(command) => command.json,
@@ -486,6 +512,57 @@ fn normalize_path(path: &std::path::Path) -> String {
         .map(|component| component.as_os_str().to_string_lossy())
         .collect::<Vec<_>>()
         .join("/")
+}
+
+fn recipients(command: RecipientsCommand, store_directory: StoreDirectory) -> Result<(), CliError> {
+    validate_init_path(command.path.as_deref())?;
+
+    let store = PasswordStore::open(store_directory)?;
+    let recipients = Recipients::new(&store);
+    let result = match &command.action {
+        Some(RecipientsAction::Add { key_id }) => {
+            let result = recipients.add(command.path.as_deref(), key_id)?;
+            if result.changed {
+                auto_commit(&store, &format!("Added GPG id {key_id}."))?;
+            }
+            result
+        }
+        Some(RecipientsAction::Remove { key_id }) => {
+            let result = recipients.remove(command.path.as_deref(), key_id)?;
+            auto_commit(&store, &format!("Removed GPG id {key_id}."))?;
+            result
+        }
+        None => recipients.list(command.path.as_deref())?,
+    };
+
+    if command.json {
+        print_json_recipients(&result)?;
+    } else {
+        print_text_recipients(&command, &result);
+    }
+
+    Ok(())
+}
+
+fn print_json_recipients(result: &RecipientsResult) -> Result<(), CliError> {
+    let json = serde_json::to_string_pretty(&RecipientsJson {
+        path: &normalize_path(&result.gpg_id_path),
+        recipients: &result.recipients,
+    })?;
+    println!("{json}");
+    Ok(())
+}
+
+fn print_text_recipients(command: &RecipientsCommand, result: &RecipientsResult) {
+    match &command.action {
+        Some(RecipientsAction::Add { key_id }) => println!("Recipient '{key_id}' added"),
+        Some(RecipientsAction::Remove { key_id }) => println!("Recipient '{key_id}' removed"),
+        None => {
+            for recipient in &result.recipients {
+                println!("{recipient}");
+            }
+        }
+    }
 }
 
 fn search_entries(command: SearchCommand, store_directory: StoreDirectory) -> Result<(), CliError> {
@@ -949,6 +1026,12 @@ struct InitJson<'entry> {
     path: &'entry str,
     recipients: &'entry [String],
     removed: bool,
+}
+
+#[derive(Debug, Serialize)]
+struct RecipientsJson<'entry> {
+    path: &'entry str,
+    recipients: &'entry [String],
 }
 
 #[derive(Debug, Serialize)]

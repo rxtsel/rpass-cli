@@ -49,6 +49,39 @@ fn git_init_initializes_repository_and_commits_current_store() {
 }
 
 #[test]
+fn git_init_succeeds_for_empty_store_without_initial_commit() {
+    let store = tempfile::TempDir::new().expect("temp dir");
+
+    rpass()
+        .env("GIT_AUTHOR_NAME", "rpass tests")
+        .env("GIT_AUTHOR_EMAIL", "rpass-tests@example.invalid")
+        .env("GIT_COMMITTER_NAME", "rpass tests")
+        .env("GIT_COMMITTER_EMAIL", "rpass-tests@example.invalid")
+        .args([
+            "--store-dir",
+            store.path().to_str().expect("store path"),
+            "git",
+            "init",
+        ])
+        .assert()
+        .success();
+
+    assert!(store.path().join(".git").is_dir());
+
+    rpass()
+        .args([
+            "--store-dir",
+            store.path().to_str().expect("store path"),
+            "git",
+            "status",
+            "--short",
+        ])
+        .assert()
+        .success()
+        .stdout("");
+}
+
+#[test]
 fn git_status_passes_arguments_to_git_in_store() {
     let store = tempfile::TempDir::new().expect("temp dir");
     init_git_repo(store.path());

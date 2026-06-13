@@ -55,6 +55,15 @@ impl GitCommand {
     fn init(&self, store: &PasswordStore) -> Result<GitCommandOutput, PasswordStoreError> {
         let init = self.run_in_store(store.path(), &["init".to_string()])?;
         let add = self.run_in_store(store.path(), &["add".to_string(), "-A".to_string()])?;
+
+        if !self.has_staged_changes(store.path())? {
+            return Ok(GitCommandOutput {
+                stdout: format!("{}{}", init.stdout, add.stdout),
+                stderr: format!("{}{}", init.stderr, add.stderr),
+                exit_code: init.exit_code,
+            });
+        }
+
         let commit = self.run_in_store(
             store.path(),
             &[
@@ -69,6 +78,11 @@ impl GitCommand {
             stderr: format!("{}{}{}", init.stderr, add.stderr, commit.stderr),
             exit_code: commit.exit_code,
         })
+    }
+
+    fn has_staged_changes(&self, store_root: &Path) -> Result<bool, PasswordStoreError> {
+        let output = self.raw_git(store_root, &["diff", "--cached", "--quiet"])?;
+        Ok(!output.status.success())
     }
 
     fn ensure_repository(&self, store_root: &Path) -> Result<(), PasswordStoreError> {

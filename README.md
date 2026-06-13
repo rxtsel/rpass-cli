@@ -84,6 +84,9 @@ rpass list                                    # list entries
 rpass search example                          # search entries
 rpass show example/login                      # show an entry explicitly
 rpass init alice@example.com                  # initialize .gpg-id recipients
+rpass recipients                              # list .gpg-id recipients
+rpass recipients add bob@example.com          # add a .gpg-id recipient
+rpass recipients remove bob@example.com       # remove a .gpg-id recipient
 rpass generate example/login                  # generate and save a 14-character password
 rpass insert example/login                    # insert a password interactively
 rpass edit example/login                      # edit or create an entry
@@ -97,6 +100,8 @@ rpass doctor                                  # check local setup
 
 `init` creates the store if needed and writes `.gpg-id` recipients. Use
 `--path <subfolder>` or `-p <subfolder>` for directory-level recipients.
+`recipients` lists or updates an existing `.gpg-id` without retyping the full
+recipient set.
 
 `generate` writes to the store by default. Use `--dry-run` to print a generated
 password or passphrase without opening the store, requiring `.gpg-id`, or calling

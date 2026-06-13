@@ -132,9 +132,9 @@ Goal: provide explicit, predictable Git commands for password-store workflows.
 Goal: support creation and maintenance of password-store compatible stores.
 
 - [x] `rpass init <key-id>`
-- [ ] `rpass recipients`
-- [ ] `rpass recipients add <key-id>`
-- [ ] `rpass recipients remove <key-id>`
+- [x] `rpass recipients`
+- [x] `rpass recipients add <key-id>`
+- [x] `rpass recipients remove <key-id>`
 - [ ] Support multiple stores only after the single-store model is stable.
 
 ## Phase 5: Compatibility Hardening

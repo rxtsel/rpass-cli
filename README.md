@@ -46,16 +46,19 @@ The crates.io package is `rpass-cli`; the installed binary is `rpass`.
 - Gpg4win or GnuPG 2.x.
 - `rpass` detects common GnuPG install paths automatically.
 - You can also set `PASSWORD_STORE_GPG` to a specific `gpg.exe`.
+- Git is optional and only required for `rpass git ...` workflows.
 
 ### macOS
 
 - GnuPG 2.x from a package manager or installer.
 - `gpg` should be available in `PATH`.
+- Git is optional and only required for `rpass git ...` workflows.
 
 ### Linux
 
 - GnuPG 2.x from your distribution packages.
 - `gpg` should be available in `PATH`.
+- Git is optional and only required for `rpass git ...` workflows.
 
 ## Store Directory
 
@@ -67,12 +70,12 @@ The crates.io package is `rpass-cli`; the installed binary is `rpass`.
 
 ## Status
 
-`rpass` can list, search, show, generate, insert, edit, remove, and move
-password-store entries using external GnuPG. It also supports TOTP generation
-from `otpauth://` lines.
+`rpass` can list, search, show, generate, insert, edit, remove, move, and run
+Git commands for password-store entries using external GnuPG. It also supports
+TOTP generation from `otpauth://` lines.
 
-Commands such as Git integration, clipboard support, and store initialization
-are intentionally not implemented yet.
+Commands such as clipboard support and store initialization are intentionally
+not implemented yet.
 
 ## Commands
 
@@ -86,6 +89,8 @@ rpass insert example/login                    # insert a password interactively
 rpass edit example/login                      # edit or create an entry
 rpass rm example/login                        # remove an entry
 rpass mv example/login archive/login          # move or rename an entry
+rpass git status                              # run git inside the store
+rpass git init                                # initialize store Git history
 rpass otp example/login                       # generate an OTP code
 rpass doctor                                  # check local setup
 ```
@@ -98,6 +103,11 @@ GPG. Use `--length <N>` with `--dry-run` when no entry name is provided.
 terminal. Use `--echo` to show input, `--multiline` to read the full entry until
 EOF, and `--force` to overwrite an existing entry. In multiline mode, the first
 line is the password and additional lines are metadata.
+
+`rpass git <args...>` passes arguments to Git using the password store as the
+repository. `rpass git init` also stages the current store and creates the same
+initial commit used by `pass`. Use `rpass git --json <args...>` for structured
+stdout, stderr, and exit code output.
 
 Most read commands support `--json` for integrations. Commands that decrypt
 entries also support `--passphrase-stdin` for non-interactive integrations:
@@ -142,8 +152,9 @@ Supported behavior:
 Known differences from `pass`:
 
 - write support is limited to `generate`, `insert`, `edit`, `rm`, and `mv`;
-- shell completion, clipboard, QR code, Git, and store
-  initialization are not implemented;
+- Git integration is explicit through `rpass git <args...>`;
+- shell completion, clipboard, QR code, and store initialization are not
+  implemented;
 - unsupported `pass` flags are rejected instead of ignored;
 - JSON output is an `rpass` integration contract, not part of the original
   `pass` CLI.

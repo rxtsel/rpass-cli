@@ -13,8 +13,8 @@ use crate::password_generator::{
     max_passphrase_words, max_password_length,
 };
 use crate::password_store::{
-    DecryptedEntry, DoctorReport, EditEntry, GpgCommand, InsertEntry, ListEntries, MoveEntry,
-    OtpCode, PasswordStore, RemoveEntry, SearchEntries, ShowEntry, StoreDirectory,
+    DecryptedEntry, DoctorReport, EditEntry, GitCommand, GpgCommand, InsertEntry, ListEntries,
+    MoveEntry, OtpCode, PasswordStore, RemoveEntry, SearchEntries, ShowEntry, StoreDirectory,
 };
 use tree_output::EntryTree;
 
@@ -70,6 +70,9 @@ enum Command {
 
     #[command(name = "mv", about = "Move or rename a password store entry")]
     Move(MoveCommand),
+
+    #[command(about = "Run git inside the password store")]
+    Git(GitStoreCommand),
 
     #[command(about = "Generate and insert a password store entry")]
     Generate(GenerateCommand),
@@ -147,6 +150,15 @@ struct MoveCommand {
 
     #[arg(long)]
     json: bool,
+}
+
+#[derive(Debug, Parser)]
+struct GitStoreCommand {
+    #[arg(long)]
+    json: bool,
+
+    #[arg(required = true, trailing_var_arg = true, allow_hyphen_values = true)]
+    args: Vec<String>,
 }
 
 #[derive(Debug, Parser)]
@@ -299,6 +311,7 @@ pub fn run() -> Result<(), CliError> {
         Some(Command::Edit(command)) => edit_entry(command, store_directory),
         Some(Command::Remove(command)) => remove_entry(command, store_directory),
         Some(Command::Move(command)) => move_entry(command, store_directory),
+        Some(Command::Git(command)) => run_git(command, store_directory),
         Some(Command::Generate(command)) => generate_entry(command, store_directory),
         Some(Command::Otp(command)) => generate_otp(command, store_directory),
         Some(Command::Search(command)) => search_entries(command, store_directory),
@@ -346,6 +359,7 @@ impl Command {
             Self::Edit(command) => command.json,
             Self::Remove(command) => command.json,
             Self::Move(command) => command.json,
+            Self::Git(command) => command.json,
             Self::Generate(command) => command.json,
             Self::Otp(command) => command.json,
             Self::Search(command) => command.json,
@@ -510,6 +524,21 @@ fn print_json_move(old_entry_name: &str, new_entry_name: &str) -> Result<(), Cli
         new_name: new_entry_name,
     })?;
     println!("{json}");
+    Ok(())
+}
+
+fn run_git(command: GitStoreCommand, store_directory: StoreDirectory) -> Result<(), CliError> {
+    let store = PasswordStore::open(store_directory)?;
+    let output = GitCommand::from_environment().execute(&store, &command.args)?;
+
+    if command.json {
+        let json = serde_json::to_string_pretty(&output)?;
+        println!("{json}");
+    } else {
+        print!("{}", output.stdout);
+        eprint!("{}", output.stderr);
+    }
+
     Ok(())
 }
 

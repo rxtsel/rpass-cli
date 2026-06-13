@@ -119,12 +119,12 @@ Android Password Store, and existing Git-based stores.
 
 Goal: provide explicit, predictable Git commands for password-store workflows.
 
-- [ ] `rpass git status`
-- [ ] `rpass git pull`
-- [ ] `rpass git push`
-- [ ] `rpass git log`
-- [ ] Keep Git integration optional.
-- [ ] Return structured errors for missing Git repositories.
+- [x] `rpass git status`
+- [x] `rpass git pull`
+- [x] `rpass git push`
+- [x] `rpass git log`
+- [x] Keep Git integration optional.
+- [x] Return structured errors for missing Git repositories.
 
 ## Phase 4: Initialization And Store Management
 

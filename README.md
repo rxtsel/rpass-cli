@@ -106,8 +106,9 @@ line is the password and additional lines are metadata.
 
 `rpass git <args...>` passes arguments to Git using the password store as the
 repository. `rpass git init` also stages the current store and creates the same
-initial commit used by `pass`. Use `rpass git --json <args...>` for structured
-stdout, stderr, and exit code output.
+initial commit used by `pass`. When the store is a Git repository, write
+commands automatically create matching commits. Use `rpass git --json <args...>`
+for structured stdout, stderr, and exit code output.
 
 Most read commands support `--json` for integrations. Commands that decrypt
 entries also support `--passphrase-stdin` for non-interactive integrations:

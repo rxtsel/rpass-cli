@@ -34,6 +34,24 @@ impl GitCommand {
         self.run_in_store(store.path(), args)
     }
 
+    pub fn auto_commit(
+        &self,
+        store: &PasswordStore,
+        message: &str,
+    ) -> Result<(), PasswordStoreError> {
+        if !self.is_repository_optional(store.path())? {
+            return Ok(());
+        }
+
+        self.run_in_store(store.path(), &["add".to_string(), "-A".to_string()])?;
+        self.run_in_store(
+            store.path(),
+            &["commit".to_string(), "-m".to_string(), message.to_string()],
+        )?;
+
+        Ok(())
+    }
+
     fn init(&self, store: &PasswordStore) -> Result<GitCommandOutput, PasswordStoreError> {
         let init = self.run_in_store(store.path(), &["init".to_string()])?;
         let add = self.run_in_store(store.path(), &["add".to_string(), "-A".to_string()])?;
@@ -61,6 +79,14 @@ impl GitCommand {
         }
 
         Err(PasswordStoreError::GitRepositoryNotFound)
+    }
+
+    fn is_repository_optional(&self, store_root: &Path) -> Result<bool, PasswordStoreError> {
+        match self.raw_git(store_root, &["rev-parse", "--is-inside-work-tree"]) {
+            Ok(output) => Ok(output.status.success()),
+            Err(PasswordStoreError::GitNotFound) if !store_root.join(".git").exists() => Ok(false),
+            Err(error) => Err(error),
+        }
     }
 
     fn run_in_store(

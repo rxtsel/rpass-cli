@@ -123,6 +123,7 @@ Goal: provide explicit, predictable Git commands for password-store workflows.
 - [x] `rpass git pull`
 - [x] `rpass git push`
 - [x] `rpass git log`
+- [x] Auto-commit write commands when the store is a Git repository.
 - [x] Keep Git integration optional.
 - [x] Return structured errors for missing Git repositories.
 

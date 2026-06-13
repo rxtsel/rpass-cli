@@ -438,6 +438,10 @@ fn insert_entry(command: InsertCommand, store_directory: StoreDirectory) -> Resu
     let content = command_entry_content(&command.entry, command.multiline, command.echo)?;
 
     InsertEntry::new(&store, &gpg).execute(&command.entry, &content, command.force)?;
+    auto_commit(
+        &store,
+        &format!("Added given password for {} to store.", command.entry),
+    )?;
 
     if command.json {
         print_json_insert(&command.entry)?;
@@ -452,6 +456,11 @@ fn print_json_insert(entry_name: &str) -> Result<(), CliError> {
     Ok(())
 }
 
+fn auto_commit(store: &PasswordStore, message: &str) -> Result<(), CliError> {
+    GitCommand::from_environment().auto_commit(store, message)?;
+    Ok(())
+}
+
 fn edit_entry(command: EditCommand, store_directory: StoreDirectory) -> Result<(), CliError> {
     let store = PasswordStore::open(store_directory)?;
     let gpg = GpgCommand::from_environment();
@@ -459,6 +468,8 @@ fn edit_entry(command: EditCommand, store_directory: StoreDirectory) -> Result<(
     let changed = EditEntry::new(&store, &gpg).execute(&command.entry)?;
 
     if changed {
+        auto_commit(&store, &format!("Edited password for {}.", command.entry))?;
+
         if command.json {
             print_json_insert(&command.entry)?;
         } else {
@@ -474,6 +485,7 @@ fn remove_entry(command: RemoveCommand, store_directory: StoreDirectory) -> Resu
 
     let store = PasswordStore::open(store_directory)?;
     RemoveEntry::new(&store).execute(&command.entry)?;
+    auto_commit(&store, &format!("Removed {} from store.", command.entry))?;
 
     if command.json {
         print_json_insert(&command.entry)?;
@@ -505,6 +517,10 @@ fn confirm_remove(command: &RemoveCommand) -> Result<(), CliError> {
 fn move_entry(command: MoveCommand, store_directory: StoreDirectory) -> Result<(), CliError> {
     let store = PasswordStore::open(store_directory)?;
     MoveEntry::new(&store).execute(&command.old_entry, &command.new_entry, command.force)?;
+    auto_commit(
+        &store,
+        &format!("Renamed {} to {}.", command.old_entry, command.new_entry),
+    )?;
 
     if command.json {
         print_json_move(&command.old_entry, &command.new_entry)?;
@@ -560,6 +576,10 @@ fn generate_entry(
         let content = format!("{password}\n");
 
         InsertEntry::new(&store, &gpg).execute(entry, &content, command.force)?;
+        auto_commit(
+            &store,
+            &format!("Added generated password for {entry} to store."),
+        )?;
     }
 
     if command.json {

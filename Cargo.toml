@@ -4,7 +4,19 @@ version = "0.1.12"
 edition = "2024"
 authors = ["rxtsel"]
 description = "Native password-store compatible backend"
+license = "MIT"
 repository = "https://github.com/rxtsel/rpass-cli"
+exclude = [
+    ".envrc",
+    ".github/**",
+    "Cargo.toml.orig",
+    "dist-workspace.toml",
+    "flake.lock",
+    "flake.nix",
+    "plans/**",
+    "wix/**",
+    "TODO.md",
+]
 
 [package.metadata.wix]
 upgrade-guid = "694EFC21-7422-4882-912D-65A6F84315EC"

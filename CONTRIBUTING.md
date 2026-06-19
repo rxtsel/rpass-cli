@@ -74,7 +74,7 @@ Releases use release-plz, cargo-dist, and Conventional Commits.
 - Normal development pushes do not create releases.
 - Merging a release pull request creates the `vX.Y.Z` tag.
 - cargo-dist builds release assets and creates or updates the GitHub Release.
-- Publishing to crates.io is disabled for now.
+- release-plz publishes to crates.io automatically after creating the tag.
 
 Review the release pull request before merging. Edit changelog entries if the
 automated summary is unclear.

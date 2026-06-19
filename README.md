@@ -1,37 +1,38 @@
 # rpass
 
-`rpass` is a native, cross-platform backend for password-store compatible
-repositories.
+[![Crates.io Version](https://img.shields.io/crates/v/rpass-cli)](https://crates.io/crates/rpass-cli)
+[![Crates.io Total Downloads](https://img.shields.io/crates/d/rpass-cli)](https://crates.io/crates/rpass-cli)
+[![CI](https://img.shields.io/github/actions/workflow/status/rxtsel/rpass-cli/rust.yml?branch=main)](https://github.com/rxtsel/rpass-cli/actions)
+[![License](https://img.shields.io/github/license/rxtsel/rpass-cli)](LICENSE)
 
-It keeps the existing `pass`/password-store format:
-
-```text
-~/.password-store/
-  example/login.gpg
-  .gpg-id
-```
-
-Decrypted entries keep the usual first-line password format:
+**rpass** is a cross-platform [`pass`](https://www.passwordstore.org/)-compatible CLI for managing GPG-encrypted secrets. It reads and writes password-store repositories on Linux, macOS, and Windows, and provides stable JSON output for launchers, plugins, and scripts.
 
 ```text
-password
-username: alice
-url: https://example.com
-otpauth://totp/...
+rpass show example/login
+rpass list --json
+rpass otp example/login --json
+rpass generate example/login
+rpass git status
 ```
 
-## Why
+## Features
 
-- Use password-store repositories from Windows, macOS, and Linux.
-- Provide stable JSON output for launchers such as Raycast and Vicinae.
-- Avoid Bash-specific behavior.
-- Keep compatibility with existing `.gpg` entries and `.gpg-id` files.
+- **Works everywhere** — Linux, macOS, Windows (no Bash dependency)
+- **password-store compatible** — reads and writes existing `.gpg` entries and `.gpg-id` files
+- **JSON output** — structured responses for Raycast, Vicinae, and custom integrations
+- **TOTP support** — generate one-time codes from `otpauth://` lines
+- **Git integration** — explicit `rpass git <args>` commands; write commands auto-commit
+- **Shell completions** — Bash, Zsh, Fish, PowerShell
+- **Non-interactive** — `--passphrase-stdin` for headless environments
+- **External GPG** — no embedded crypto; uses your existing GnuPG installation
 
 ## Installation
 
-Prebuilt binaries and installers are available on the GitHub Releases page.
+### Prebuilt binaries
 
-Install from crates.io with:
+Download from the [GitHub Releases](https://github.com/rxtsel/rpass-cli/releases) page. Archives, MSI (Windows), shell installers, and checksums are available for all platforms.
+
+### crates.io
 
 ```bash
 cargo install rpass-cli
@@ -41,128 +42,36 @@ The crates.io package is `rpass-cli`; the installed binary is `rpass`.
 
 ## Requirements
 
-### Windows
+- **GnuPG 2.x** (`gpg`) — install via Gpg4win (Windows), Homebrew (macOS), or your system package manager (Linux)
+- **Git** — optional, only needed for `rpass git ...`
 
-- Gpg4win or GnuPG 2.x.
-- `rpass` detects common GnuPG install paths automatically.
-- You can also set `PASSWORD_STORE_GPG` to a specific `gpg.exe`.
-- Git is optional and only required for `rpass git ...` workflows.
+## Quick Start
 
-### macOS
-
-- GnuPG 2.x from a package manager or installer.
-- `gpg` should be available in `PATH`.
-- Git is optional and only required for `rpass git ...` workflows.
-
-### Linux
-
-- GnuPG 2.x from your distribution packages.
-- `gpg` should be available in `PATH`.
-- Git is optional and only required for `rpass git ...` workflows.
+```bash
+rpass init alice@example.com              # initialize a store
+rpass list                                # list entries
+rpass show example/login                  # show an entry
+rpass generate example/login              # generate a 14-character password
+rpass insert example/login                # insert a password
+rpass edit example/login                  # edit an entry
+rpass rm example/login                    # remove an entry
+rpass mv example/login archive/login      # move/rename an entry
+rpass otp example/login                   # generate a TOTP code
+rpass git status                          # run git inside the store
+rpass doctor                              # check your local setup
+```
 
 ## Store Directory
 
-`rpass` resolves the store directory in this order:
+`rpass` resolves the store in this order:
 
 1. `--store-dir <PATH>`
 2. `PASSWORD_STORE_DIR`
 3. `~/.password-store`
 
-## Status
+## JSON Output
 
-`rpass` can initialize, list, search, show, generate, insert, edit, remove,
-move, and run Git commands for password-store entries using external GnuPG. It
-also supports TOTP generation from `otpauth://` lines.
-
-Commands such as clipboard support are intentionally not implemented yet.
-
-## Commands
-
-```bash
-rpass -h                                      # show help
-rpass list                                    # list entries
-rpass search example                          # search entries
-rpass show example/login                      # show an entry explicitly
-rpass init alice@example.com                  # initialize .gpg-id recipients
-rpass recipients                              # list .gpg-id recipients
-rpass recipients add bob@example.com          # add a .gpg-id recipient
-rpass recipients remove bob@example.com       # remove a .gpg-id recipient
-rpass generate example/login                  # generate and save a 14-character password
-rpass insert example/login                    # insert a password interactively
-rpass edit example/login                      # edit or create an entry
-rpass rm example/login                        # remove an entry
-rpass mv example/login archive/login          # move or rename an entry
-rpass git status                              # run git inside the store
-rpass git init                                # initialize store Git history
-rpass otp example/login                       # generate an OTP code
-rpass doctor                                  # check local setup
-```
-
-`init` creates the store if needed and writes `.gpg-id` recipients. Use
-`--path <subfolder>` or `-p <subfolder>` for directory-level recipients.
-`recipients` lists or updates an existing `.gpg-id` without retyping the full
-recipient set.
-
-`generate` writes to the store by default. Use `--dry-run` to print a generated
-password or passphrase without opening the store, requiring `.gpg-id`, or calling
-GPG. Use `--length <N>` with `--dry-run` when no entry name is provided.
-
-`insert` prompts for a password and confirmation when run in an interactive
-terminal. Use `--echo` to show input, `--multiline` to read the full entry until
-EOF, and `--force` to overwrite an existing entry. In multiline mode, the first
-line is the password and additional lines are metadata.
-
-`rpass git <args...>` passes arguments to Git using the password store as the
-repository. `rpass git init` also stages the current store and creates the same
-initial commit used by `pass`. When the store is a Git repository, write
-commands automatically create matching commits. Use `rpass git --json <args...>`
-for structured stdout, stderr, and exit code output.
-
-Most read commands support `--json` for integrations. Commands that decrypt
-entries also support `--passphrase-stdin` for non-interactive integrations:
-
-```bash
-printf 'gpg-passphrase\n' | rpass show example/login --json --passphrase-stdin
-printf 'gpg-passphrase\n' | rpass otp example/login --json --passphrase-stdin
-```
-
-Run `rpass <command> --help` for command-specific flags.
-
-## Shell Completion
-
-```bash
-rpass completions bash >> ~/.bashrc
-```
-
-For Zsh:
-
-```zsh
-rpass completions zsh > "${fpath[1]}/_rpass"
-compinit
-```
-
-For PowerShell (run as administrator):
-
-```powershell
-rpass completions powershell >> $PROFILE
-```
-
-For Fish, the file must exist in the completions directory (Fish auto-loads it):
-
-```fish
-rpass completions fish > ~/.config/fish/completions/rpass.fish
-```
-
-After installation, `rpass show <Tab>` completes entry names, `rpass show Personal/<Tab>` filters by prefix, and `rpass list <Tab>` shows subcommands.
-
-## JSON Contract
-
-Commands that accept `--json` follow this contract:
-
-- exit code `0`: stdout contains one complete JSON value and stderr is empty;
-- non-zero exit code: stderr contains one JSON error object and stdout is empty.
-
-Error responses use this shape:
+Most read commands accept `--json`. On success, stdout contains the JSON value and stderr is empty. On error, the exit code is non-zero and stderr contains:
 
 ```json
 {
@@ -173,24 +82,39 @@ Error responses use this shape:
 }
 ```
 
-## Password-store Compatibility
+Non-interactive workflows:
 
-Supported behavior:
+```bash
+printf 'gpg-passphrase\n' | rpass show example/login --json --passphrase-stdin
+printf 'gpg-passphrase\n' | rpass otp example/login --json --passphrase-stdin
+```
 
-- entries are addressed without the `.gpg` suffix;
-- decrypted first line is the password;
-- `name: value` metadata lines are preserved in JSON fields;
-- `otpauth://` lines are used for TOTP generation;
-- unknown lines are preserved as `extra_lines`;
-- store directory is resolved from `--store-dir`, `PASSWORD_STORE_DIR`, then
-  `~/.password-store`.
+## Shell Completions
 
-Known differences from `pass`:
+```bash
+rpass completions bash >> ~/.bashrc
+rpass completions zsh > "${fpath[1]}/_rpass"
+rpass completions fish > ~/.config/fish/completions/rpass.fish
+rpass completions powershell >> $PROFILE
+```
 
-- write support is limited to `generate`, `insert`, `edit`, `rm`, and `mv`;
-- Git integration is explicit through `rpass git <args...>`;
-- changing recipients with `init` does not re-encrypt existing entries yet;
-- clipboard and QR code are not implemented;
-- unsupported `pass` flags are rejected instead of ignored;
-- JSON output is an `rpass` integration contract, not part of the original
-  `pass` CLI.
+## password-store Compatibility
+
+**Supported:**
+- Entries addressed without the `.gpg` suffix
+- First decrypted line is the password
+- `name: value` metadata lines preserved in JSON
+- `otpauth://` lines for TOTP
+- Unknown lines preserved as `extra_lines`
+- Directory-level recipients with `.gpg-id`
+
+**Known differences from `pass`:**
+- `generate`, `insert`, `edit`, `rm`, and `mv` for writes
+- Git is explicit (`rpass git <args>`) rather than automatic
+- Changing recipients with `init` does not re-encrypt existing entries
+- Clipboard and QR codes are not implemented
+- Unsupported `pass` flags are rejected instead of ignored
+
+## License
+
+MIT

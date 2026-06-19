@@ -1,0 +1,19 @@
+#compdef rpass
+
+_rpass_entries() {
+    local -a entries
+    entries=("${(@f)$(rpass complete-entries -- "$PREFIX" 2>/dev/null)}")
+    _describe 'entries' entries
+}
+
+_rpass() {
+    local -a entry_commands=(show insert edit rm mv generate otp)
+
+    if (( CURRENT == 2 )); then
+        _values 'command' list show init recipients insert edit rm mv git generate otp search doctor completions
+    elif (( ${entry_commands[(Ie)${words[2]}]} )); then
+        _rpass_entries
+    fi
+}
+
+_rpass "$@"

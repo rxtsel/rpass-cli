@@ -1,3 +1,4 @@
+mod completion;
 mod tree_output;
 
 use std::io::{BufRead, IsTerminal, Read, Write};
@@ -7,6 +8,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use clap::{ArgAction, Parser, Subcommand, ValueHint};
 use serde::Serialize;
 
+use self::completion::Shell;
 use crate::password_generator::{
     PassphraseOptions, PasswordGeneratorError, PasswordOptions, default_passphrase_separator,
     default_passphrase_words, default_password_length, generate_passphrase, generate_password,
@@ -42,14 +44,14 @@ struct Cli {
     )]
     store_dir: Option<PathBuf>,
 
+    #[command(subcommand)]
+    command: Option<Command>,
+
     #[arg(
         value_name = "ENTRY",
         help = "Show this password store entry (default command)"
     )]
     entry: Option<String>,
-
-    #[command(subcommand)]
-    command: Option<Command>,
 }
 
 #[derive(Debug, Subcommand)]
@@ -92,6 +94,12 @@ enum Command {
 
     #[command(about = "Check the local rpass environment")]
     Doctor(DoctorCommand),
+
+    #[command(about = "Generate shell completion scripts")]
+    Completions(CompletionsCommand),
+
+    #[command(name = "complete-entries", hide = true)]
+    CompleteEntries(CompleteEntriesCommand),
 }
 
 #[derive(Debug, Parser)]
@@ -339,8 +347,27 @@ struct DoctorCommand {
     json: bool,
 }
 
+#[derive(Debug, Parser)]
+struct CompletionsCommand {
+    #[arg(value_enum)]
+    shell: Shell,
+}
+
+#[derive(Debug, Parser)]
+struct CompleteEntriesCommand {
+    #[arg(default_value = "")]
+    prefix: String,
+}
+
 pub fn run() -> Result<(), CliError> {
     let cli = Cli::parse();
+
+    if let Some(Command::Completions(command)) = &cli.command {
+        completion::print_completions(command.shell);
+        return Ok(());
+    }
+
+    let store_dir = cli.store_dir.clone();
     let wants_json_error = cli.command.as_ref().is_some_and(Command::wants_json);
     let store_directory = StoreDirectory::resolve(cli.store_dir)?;
 
@@ -358,6 +385,11 @@ pub fn run() -> Result<(), CliError> {
         Some(Command::Otp(command)) => generate_otp(command, store_directory),
         Some(Command::Search(command)) => search_entries(command, store_directory),
         Some(Command::Doctor(command)) => run_doctor(command, store_directory),
+        Some(Command::CompleteEntries(command)) => {
+            completion::complete_entries(&command.prefix, store_dir);
+            Ok(())
+        }
+        Some(Command::Completions(_)) => unreachable!(),
         None => {
             if let Some(entry) = cli.entry {
                 show_entry(
@@ -408,6 +440,7 @@ impl Command {
             Self::Otp(command) => command.json,
             Self::Search(command) => command.json,
             Self::Doctor(command) => command.json,
+            Self::Completions(_) | Self::CompleteEntries(_) => false,
         }
     }
 }

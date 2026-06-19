@@ -128,6 +128,33 @@ printf 'gpg-passphrase\n' | rpass otp example/login --json --passphrase-stdin
 
 Run `rpass <command> --help` for command-specific flags.
 
+## Shell Completion
+
+```bash
+rpass completions bash >> ~/.bashrc
+```
+
+For Zsh:
+
+```zsh
+rpass completions zsh > "${fpath[1]}/_rpass"
+compinit
+```
+
+For PowerShell (run as administrator):
+
+```powershell
+rpass completions powershell >> $PROFILE
+```
+
+For Fish, the file must exist in the completions directory (Fish auto-loads it):
+
+```fish
+rpass completions fish > ~/.config/fish/completions/rpass.fish
+```
+
+After installation, `rpass show <Tab>` completes entry names, `rpass show Personal/<Tab>` filters by prefix, and `rpass list <Tab>` shows subcommands.
+
 ## JSON Contract
 
 Commands that accept `--json` follow this contract:
@@ -163,7 +190,7 @@ Known differences from `pass`:
 - write support is limited to `generate`, `insert`, `edit`, `rm`, and `mv`;
 - Git integration is explicit through `rpass git <args...>`;
 - changing recipients with `init` does not re-encrypt existing entries yet;
-- shell completion, clipboard, and QR code are not implemented;
+- clipboard and QR code are not implemented;
 - unsupported `pass` flags are rejected instead of ignored;
 - JSON output is an `rpass` integration contract, not part of the original
   `pass` CLI.

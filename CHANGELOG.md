@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 This project uses [Conventional Commits](https://www.conventionalcommits.org/)
 and release automation with release-plz.
 
+## [0.1.14](https://github.com/rxtsel/rpass-cli/compare/v0.1.13...v0.1.14) - 2026-06-19
+
+### 🚀 Features
+
+- Create LICENSE
+
+
+### 📚 Documentation
+
+- Link license
+
+
+
 ## [0.1.13](https://github.com/rxtsel/rpass-cli/compare/v0.1.12...v0.1.13) - 2026-06-19
 
 ### 🚀 Features

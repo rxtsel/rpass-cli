@@ -1,13 +1,13 @@
 [workspace]
 changelog_update = true
 changelog_config = "cliff.toml"
-git_only = true
+git_only = false
 git_release_enable = false
 git_release_name = "v{{ version }}"
 git_tag_enable = true
 git_tag_name = "v{{ version }}"
 pr_labels = ["release"]
-publish = false
+publish = true
 release_always = false
 # The package was renamed from `rpass` to `rpass-cli` after the v0.1.3 tag.
 # cargo-semver-checks cannot compare the renamed package against older tags.

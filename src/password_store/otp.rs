@@ -91,7 +91,9 @@ fn normalize_query_value(key: &str, value: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{DecryptedEntry, OtpCode, normalize_otp_uri, remaining_seconds, totp_error_message};
+    use super::{
+        DecryptedEntry, OtpCode, normalize_otp_uri, remaining_seconds, totp_error_message,
+    };
     use totp_rs::TotpUrlError;
 
     #[test]
@@ -226,10 +228,7 @@ otpauth://totp/Politecnico+Grancolombiano%3auser@example.com?secret=KRSXG5CTMVRX
                 TotpUrlError::Algorithm("MD5".to_string()),
                 "unknown algorithm: MD5",
             ),
-            (
-                TotpUrlError::Host("hotp".to_string()),
-                "invalid host: hotp",
-            ),
+            (TotpUrlError::Host("hotp".to_string()), "invalid host: hotp"),
             (
                 TotpUrlError::Scheme("https".to_string()),
                 "invalid scheme: https",
@@ -239,10 +238,7 @@ otpauth://totp/Politecnico+Grancolombiano%3auser@example.com?secret=KRSXG5CTMVRX
                 "invalid digits: abc",
             ),
             (TotpUrlError::DigitsNumber(5), "invalid digits count: 5"),
-            (
-                TotpUrlError::Step("xyz".to_string()),
-                "invalid period: xyz",
-            ),
+            (TotpUrlError::Step("xyz".to_string()), "invalid period: xyz"),
             (
                 TotpUrlError::Issuer("Iss:uer".to_string()),
                 "issuer contains colon: Iss:uer",

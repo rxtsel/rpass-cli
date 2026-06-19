@@ -117,4 +117,4 @@ rpass completions powershell >> $PROFILE
 
 ## License
 
-MIT
+[MIT](LICENSE)

@@ -178,7 +178,7 @@ otpauth://totp/example?secret=not-valid-secret
         .assert()
         .failure()
         .stderr(predicate::str::contains(
-            "entry contains an invalid otpauth URI",
+            "entry contains an invalid otpauth URI: invalid base32 secret",
         ))
         .stderr(predicate::str::contains(leaked_secret).not());
 }

@@ -803,6 +803,7 @@ dependencies = [
  "thiserror",
  "totp-rs",
  "url",
+ "urlencoding",
 ]
 
 [[package]]

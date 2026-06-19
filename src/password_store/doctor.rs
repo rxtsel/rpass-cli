@@ -95,6 +95,7 @@ fn gpg_version_check(gpg: &GpgCommand) -> DoctorCheck {
 #[cfg(test)]
 mod tests {
     use std::fs;
+    use std::path::PathBuf;
 
     use tempfile::TempDir;
 
@@ -105,19 +106,19 @@ mod tests {
     fn reports_ready_environment() {
         let temp_dir = TempDir::new().expect("temp dir");
         fs::write(temp_dir.path().join(".gpg-id"), "KEY").expect("gpg id");
-        let gpg = fake_gpg_script(temp_dir.path(), "gpg (GnuPG) test\n");
+        let gpg = fake_gpg();
         let store_directory = StoreDirectory::from_path(temp_dir.path());
 
         let report = DoctorReport::run(&store_directory, &GpgCommand::new(gpg));
 
-        assert!(report.ok);
+        assert!(report.ok, "doctor report: {report:#?}");
         assert!(report.checks.iter().all(|check| check.ok));
     }
 
     #[test]
     fn reports_missing_gpg_id() {
         let temp_dir = TempDir::new().expect("temp dir");
-        let gpg = fake_gpg_script(temp_dir.path(), "gpg (GnuPG) test\n");
+        let gpg = fake_gpg();
         let store_directory = StoreDirectory::from_path(temp_dir.path());
 
         let report = DoctorReport::run(&store_directory, &GpgCommand::new(gpg));
@@ -131,29 +132,15 @@ mod tests {
         );
     }
 
-    #[cfg(windows)]
-    fn fake_gpg_script(directory: &std::path::Path, output: &str) -> std::path::PathBuf {
-        let script = directory.join("gpg-version.cmd");
-        let output_file = directory.join("gpg-version-output.txt");
-
-        fs::write(&output_file, output).expect("output file");
-        fs::write(
-            &script,
-            format!("@echo off\r\ntype \"{}\"\r\n", output_file.display()),
-        )
-        .expect("script");
-        script
-    }
-
-    #[cfg(not(windows))]
-    fn fake_gpg_script(directory: &std::path::Path, output: &str) -> std::path::PathBuf {
-        use std::os::unix::fs::PermissionsExt;
-
-        let script = directory.join("gpg-version");
-        fs::write(&script, format!("#!/bin/sh\nprintf '{}'\n", output)).expect("script");
-        let mut permissions = fs::metadata(&script).expect("metadata").permissions();
-        permissions.set_mode(0o755);
-        fs::set_permissions(&script, permissions).expect("permissions");
-        script
+    fn fake_gpg() -> std::path::PathBuf {
+        // Use a program where --version exits 0 everywhere:
+        // - GNU coreutils true: prints version to stdout, exits 0
+        // - macOS/BSD true: exits 0 silently
+        // - cargo: available during tests on all platforms
+        if cfg!(windows) {
+            PathBuf::from("cargo")
+        } else {
+            PathBuf::from("true")
+        }
     }
 }

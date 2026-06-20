@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 This project uses [Conventional Commits](https://www.conventionalcommits.org/)
 and release automation with release-plz.
 
+## [0.1.16](https://github.com/rxtsel/rpass-cli/compare/v0.1.15...v0.1.16) - 2026-06-20
+
+### 🚀 Features
+
+- *(import)* Add Bitwarden JSON import with extensible importer trait
+
+
+### 📚 Documentation
+
+- Add import guide and README reference
+
+
+### 🎨 Styling
+
+- Format with clippy
+
+
+
 ## [0.1.15](https://github.com/rxtsel/rpass-cli/compare/v0.1.14...v0.1.15) - 2026-06-19
 
 ### 🐛 Bug Fixes

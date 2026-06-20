@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 This project uses [Conventional Commits](https://www.conventionalcommits.org/)
 and release automation with release-plz.
 
+## [0.1.15](https://github.com/rxtsel/rpass-cli/compare/v0.1.14...v0.1.15) - 2026-06-19
+
+### 🐛 Bug Fixes
+
+- *(otp)* Handle conflicting issuer in otpauth URI query param
+
+
+### 🎨 Styling
+
+- Apply cargo fmt
+
+
+
 ## [0.1.14](https://github.com/rxtsel/rpass-cli/compare/v0.1.13...v0.1.14) - 2026-06-19
 
 ### 🚀 Features

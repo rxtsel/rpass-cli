@@ -1,6 +1,6 @@
 use super::{
-    importer::{Importer, ImportEntry},
     EntryName, GpgCommand, InsertEntry, PasswordStore, PasswordStoreError,
+    importer::{ImportEntry, Importer},
 };
 
 #[derive(Debug)]
@@ -26,9 +26,9 @@ impl<'store, 'gpg> ImportEntries<'store, 'gpg> {
         data: &str,
         force: bool,
     ) -> Result<ImportResult, PasswordStoreError> {
-        let entries = importer.parse(data).map_err(|error| {
-            PasswordStoreError::ImportFailed(error.to_string())
-        })?;
+        let entries = importer
+            .parse(data)
+            .map_err(|error| PasswordStoreError::ImportFailed(error.to_string()))?;
 
         let total = entries.len();
         let mut imported = 0;
@@ -38,7 +38,10 @@ impl<'store, 'gpg> ImportEntries<'store, 'gpg> {
             match self.insert_import_entry(entry, force) {
                 Ok(()) => imported += 1,
                 Err(PasswordStoreError::EntryAlreadyExists(name)) => {
-                    errors.push(format!("'{}' already exists; use --force to overwrite or resolve manually", name));
+                    errors.push(format!(
+                        "'{}' already exists; use --force to overwrite or resolve manually",
+                        name
+                    ));
                 }
                 Err(e) => {
                     errors.push(e.to_string());
@@ -106,9 +109,17 @@ impl<'store, 'gpg> ImportEntries<'store, 'gpg> {
 }
 
 const INVALIDS: &[(char, &str)] = &[
-    ('<', "-"), ('>', "-"), (':', "-"), ('"', "-"),
-    ('/', "-"), ('\\', "-"), ('|', "-"), ('?', "-"), ('*', "-"),
-    ('&', "and"), ('@', "At"),
+    ('<', "-"),
+    ('>', "-"),
+    (':', "-"),
+    ('"', "-"),
+    ('/', "-"),
+    ('\\', "-"),
+    ('|', "-"),
+    ('?', "-"),
+    ('*', "-"),
+    ('&', "and"),
+    ('@', "At"),
 ];
 
 fn sanitize_path(path: &str) -> String {
@@ -126,7 +137,11 @@ fn sanitize_segment(segment: &str) -> String {
         match c {
             '\0' | '\t' | '\'' | '[' | ']' => {}
             _ if is_invalid(c) => {
-                let replacement = INVALIDS.iter().find(|&&(ch, _)| ch == c).map(|&(_, s)| s).unwrap_or("-");
+                let replacement = INVALIDS
+                    .iter()
+                    .find(|&&(ch, _)| ch == c)
+                    .map(|&(_, s)| s)
+                    .unwrap_or("-");
                 cleaned.push_str(replacement);
             }
             _ => cleaned.push(c),
@@ -164,12 +179,15 @@ fn build_entry_content(entry: &ImportEntry) -> String {
 #[cfg(test)]
 mod tests {
     use super::{build_entry_content, sanitize_path, sanitize_segment};
-    use crate::password_store::importer::ImportEntry;
     use crate::password_store::EntryField;
+    use crate::password_store::importer::ImportEntry;
 
     #[test]
     fn segment_replaces_invalids() {
-        assert_eq!(sanitize_segment("a<b>c:d\"e/f\\g|h?i*j"), "a-b-c-d-e-f-g-h-i-j");
+        assert_eq!(
+            sanitize_segment("a<b>c:d\"e/f\\g|h?i*j"),
+            "a-b-c-d-e-f-g-h-i-j"
+        );
     }
 
     #[test]

@@ -14,12 +14,12 @@ use crate::password_generator::{
     default_passphrase_words, default_password_length, generate_passphrase, generate_password,
     max_passphrase_words, max_password_length,
 };
+use crate::password_store::importer::bitwarden::BitwardenImporter;
 use crate::password_store::{
     DecryptedEntry, DoctorReport, EditEntry, GitCommand, GpgCommand, ImportEntries, ImportResult,
     InitStore, InitStoreResult, InsertEntry, ListEntries, MoveEntry, OtpCode, PasswordStore,
     Recipients, RecipientsResult, RemoveEntry, SearchEntries, ShowEntry, StoreDirectory,
 };
-use crate::password_store::importer::bitwarden::BitwardenImporter;
 use tree_output::EntryTree;
 
 #[derive(Debug, Parser)]
@@ -365,10 +365,7 @@ struct CompleteEntriesCommand {
 
 #[derive(Debug, Parser)]
 struct ImportCommand {
-    #[arg(
-        help = "Import from a Bitwarden JSON export",
-        long = "bitwarden"
-    )]
+    #[arg(help = "Import from a Bitwarden JSON export", long = "bitwarden")]
     bitwarden: bool,
 
     #[arg(help = "Path to the import file")]
@@ -689,13 +686,17 @@ fn print_json_insert(entry_name: &str) -> Result<(), CliError> {
 fn import_entries(command: ImportCommand, store_directory: StoreDirectory) -> Result<(), CliError> {
     let store = PasswordStore::open(store_directory)?;
     let gpg = GpgCommand::from_environment();
-    let data = std::fs::read_to_string(&command.file)
-        .map_err(|e| CliError::ImportFailed(format!("cannot read '{}': {}", command.file.display(), e)))?;
+    let data = std::fs::read_to_string(&command.file).map_err(|e| {
+        CliError::ImportFailed(format!("cannot read '{}': {}", command.file.display(), e))
+    })?;
 
-    let result = ImportEntries::new(&store, &gpg)
-        .execute(&BitwardenImporter, &data, command.force)?;
+    let result =
+        ImportEntries::new(&store, &gpg).execute(&BitwardenImporter, &data, command.force)?;
 
-    auto_commit(&store, &format!("Imported {} entries from Bitwarden", result.imported))?;
+    auto_commit(
+        &store,
+        &format!("Imported {} entries from Bitwarden", result.imported),
+    )?;
 
     if command.json {
         print_json_import(&result, "Bitwarden")?;
@@ -707,7 +708,12 @@ fn import_entries(command: ImportCommand, store_directory: StoreDirectory) -> Re
 }
 
 fn print_text_import(result: &ImportResult, source: &str) {
-    println!("Imported {}/{} entries from {}", result.imported, result.imported + result.skipped, source);
+    println!(
+        "Imported {}/{} entries from {}",
+        result.imported,
+        result.imported + result.skipped,
+        source
+    );
     for error in &result.errors {
         eprintln!("  {}", error);
     }

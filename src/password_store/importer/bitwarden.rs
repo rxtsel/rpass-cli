@@ -12,7 +12,11 @@ impl Importer for BitwardenImporter {
     fn parse(&self, data: &str) -> Result<Vec<ImportEntry>, ImportError> {
         let root: Value = serde_json::from_str(data)?;
 
-        if root.get("encrypted").and_then(|v| v.as_bool()).unwrap_or(false) {
+        if root
+            .get("encrypted")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false)
+        {
             return Err(ImportError::EncryptedFile);
         }
 
@@ -51,8 +55,16 @@ fn build_folder_map(root: &Value) -> HashMap<String, String> {
         };
 
         for group in groups {
-            let id = group.get("id").and_then(|v| v.as_str()).unwrap_or_default().to_owned();
-            let name = group.get("name").and_then(|v| v.as_str()).unwrap_or_default().to_owned();
+            let id = group
+                .get("id")
+                .and_then(|v| v.as_str())
+                .unwrap_or_default()
+                .to_owned();
+            let name = group
+                .get("name")
+                .and_then(|v| v.as_str())
+                .unwrap_or_default()
+                .to_owned();
             if !id.is_empty() {
                 map.insert(id, name);
             }
@@ -89,9 +101,7 @@ fn parse_item(item: &Value, folders: &HashMap<String, String>) -> Option<ImportE
         .filter(|s| !s.is_empty())
         .map(String::from);
 
-    let uris = login
-        .and_then(|l| l.get("uris"))
-        .and_then(|v| v.as_array());
+    let uris = login.and_then(|l| l.get("uris")).and_then(|v| v.as_array());
 
     let mut fields = Vec::new();
 
@@ -109,7 +119,11 @@ fn parse_item(item: &Value, folders: &HashMap<String, String>) -> Option<ImportE
                 .and_then(|v| v.as_str())
                 .filter(|s| !s.is_empty());
             if let Some(uri) = uri {
-                let key = if i == 0 { "url".to_owned() } else { format!("url{}", i + 1) };
+                let key = if i == 0 {
+                    "url".to_owned()
+                } else {
+                    format!("url{}", i + 1)
+                };
                 fields.push(EntryField {
                     name: key,
                     value: uri.to_owned(),
@@ -123,7 +137,9 @@ fn parse_item(item: &Value, folders: &HashMap<String, String>) -> Option<ImportE
         if let Some(card) = item.get("card") {
             flatten_object(card, &mut fields);
         }
-    } else if item_type == 4 && let Some(identity) = item.get("identity") {
+    } else if item_type == 4
+        && let Some(identity) = item.get("identity")
+    {
         flatten_object(identity, &mut fields);
     }
 
@@ -245,9 +261,24 @@ mod tests {
         assert_eq!(entry.name, "Twitter");
         assert_eq!(entry.folder.as_deref(), Some("Social"));
         assert_eq!(entry.password.as_deref(), Some("secret123"));
-        assert!(entry.fields.iter().any(|f| f.name == "username" && f.value == "me@example.com"));
-        assert!(entry.fields.iter().any(|f| f.name == "url" && f.value == "https://twitter.com"));
-        assert!(entry.fields.iter().any(|f| f.name == "handle" && f.value == "@me"));
+        assert!(
+            entry
+                .fields
+                .iter()
+                .any(|f| f.name == "username" && f.value == "me@example.com")
+        );
+        assert!(
+            entry
+                .fields
+                .iter()
+                .any(|f| f.name == "url" && f.value == "https://twitter.com")
+        );
+        assert!(
+            entry
+                .fields
+                .iter()
+                .any(|f| f.name == "handle" && f.value == "@me")
+        );
         assert!(entry.otp_uri.as_deref().unwrap().starts_with("otpauth://"));
         assert_eq!(entry.notes.as_deref(), Some("My Twitter account"));
     }
@@ -256,7 +287,10 @@ mod tests {
     fn rejects_encrypted_export() {
         let json = r#"{"encrypted": true, "items": []}"#;
         let importer = BitwardenImporter;
-        assert!(matches!(importer.parse(json), Err(ImportError::EncryptedFile)));
+        assert!(matches!(
+            importer.parse(json),
+            Err(ImportError::EncryptedFile)
+        ));
     }
 
     #[test]
@@ -298,7 +332,10 @@ mod tests {
         let entries = importer.parse(json).expect("parse");
         assert_eq!(entries.len(), 1);
         assert!(entries[0].password.is_none());
-        assert_eq!(entries[0].notes.as_deref(), Some("This is a secure note content"));
+        assert_eq!(
+            entries[0].notes.as_deref(),
+            Some("This is a secure note content")
+        );
     }
 
     #[test]
@@ -322,7 +359,12 @@ mod tests {
         let importer = BitwardenImporter;
         let entries = importer.parse(json).expect("parse");
         assert_eq!(entries.len(), 1);
-        assert!(entries[0].fields.iter().any(|f| f.name == "brand" && f.value == "Visa"));
+        assert!(
+            entries[0]
+                .fields
+                .iter()
+                .any(|f| f.name == "brand" && f.value == "Visa")
+        );
     }
 
     #[test]
@@ -390,7 +432,17 @@ mod tests {
         let importer = BitwardenImporter;
         let entries = importer.parse(json).expect("parse");
         assert_eq!(entries.len(), 1);
-        assert!(entries[0].fields.iter().any(|f| f.name == "url" && f.value == "https://primary.com"));
-        assert!(entries[0].fields.iter().any(|f| f.name == "url2" && f.value == "https://backup.com"));
+        assert!(
+            entries[0]
+                .fields
+                .iter()
+                .any(|f| f.name == "url" && f.value == "https://primary.com")
+        );
+        assert!(
+            entries[0]
+                .fields
+                .iter()
+                .any(|f| f.name == "url2" && f.value == "https://backup.com")
+        );
     }
 }

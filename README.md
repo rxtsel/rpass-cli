@@ -20,6 +20,7 @@ rpass git status
 - **Works everywhere** — Linux, macOS, Windows (no Bash dependency)
 - **password-store compatible** — reads and writes existing `.gpg` entries and `.gpg-id` files
 - **JSON output** — structured responses for Raycast, Vicinae, and custom integrations
+- **Import** — migrate from other password managers ([docs](docs/import.md))
 - **TOTP support** — generate one-time codes from `otpauth://` lines
 - **Git integration** — explicit `rpass git <args>` commands; write commands auto-commit
 - **Shell completions** — Bash, Zsh, Fish, PowerShell
@@ -56,6 +57,7 @@ rpass insert example/login                # insert a password
 rpass edit example/login                  # edit an entry
 rpass rm example/login                    # remove an entry
 rpass mv example/login archive/login      # move/rename an entry
+rpass import --bitwarden ~/export.json    # import from Bitwarden
 rpass otp example/login                   # generate a TOTP code
 rpass git status                          # run git inside the store
 rpass doctor                              # check your local setup

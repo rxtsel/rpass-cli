@@ -15,10 +15,11 @@ use crate::password_generator::{
     max_passphrase_words, max_password_length,
 };
 use crate::password_store::{
-    DecryptedEntry, DoctorReport, EditEntry, GitCommand, GpgCommand, InitStore, InitStoreResult,
-    InsertEntry, ListEntries, MoveEntry, OtpCode, PasswordStore, Recipients, RecipientsResult,
-    RemoveEntry, SearchEntries, ShowEntry, StoreDirectory,
+    DecryptedEntry, DoctorReport, EditEntry, GitCommand, GpgCommand, ImportEntries, ImportResult,
+    InitStore, InitStoreResult, InsertEntry, ListEntries, MoveEntry, OtpCode, PasswordStore,
+    Recipients, RecipientsResult, RemoveEntry, SearchEntries, ShowEntry, StoreDirectory,
 };
+use crate::password_store::importer::bitwarden::BitwardenImporter;
 use tree_output::EntryTree;
 
 #[derive(Debug, Parser)]
@@ -100,6 +101,9 @@ enum Command {
 
     #[command(name = "complete-entries", hide = true)]
     CompleteEntries(CompleteEntriesCommand),
+
+    #[command(about = "Import entries from other password managers")]
+    Import(ImportCommand),
 }
 
 #[derive(Debug, Parser)]
@@ -359,6 +363,24 @@ struct CompleteEntriesCommand {
     prefix: String,
 }
 
+#[derive(Debug, Parser)]
+struct ImportCommand {
+    #[arg(
+        help = "Import from a Bitwarden JSON export",
+        long = "bitwarden"
+    )]
+    bitwarden: bool,
+
+    #[arg(help = "Path to the import file")]
+    file: PathBuf,
+
+    #[arg(short = 'f', long, help = "Overwrite existing entries")]
+    force: bool,
+
+    #[arg(long, help = "Output in JSON format")]
+    json: bool,
+}
+
 pub fn run() -> Result<(), CliError> {
     let cli = Cli::parse();
 
@@ -385,6 +407,7 @@ pub fn run() -> Result<(), CliError> {
         Some(Command::Otp(command)) => generate_otp(command, store_directory),
         Some(Command::Search(command)) => search_entries(command, store_directory),
         Some(Command::Doctor(command)) => run_doctor(command, store_directory),
+        Some(Command::Import(command)) => import_entries(command, store_directory),
         Some(Command::CompleteEntries(command)) => {
             completion::complete_entries(&command.prefix, store_dir);
             Ok(())
@@ -440,6 +463,7 @@ impl Command {
             Self::Otp(command) => command.json,
             Self::Search(command) => command.json,
             Self::Doctor(command) => command.json,
+            Self::Import(command) => command.json,
             Self::Completions(_) | Self::CompleteEntries(_) => false,
         }
     }
@@ -658,6 +682,51 @@ fn insert_entry(command: InsertCommand, store_directory: StoreDirectory) -> Resu
 
 fn print_json_insert(entry_name: &str) -> Result<(), CliError> {
     let json = serde_json::to_string_pretty(&InsertJson { name: entry_name })?;
+    println!("{json}");
+    Ok(())
+}
+
+fn import_entries(command: ImportCommand, store_directory: StoreDirectory) -> Result<(), CliError> {
+    let store = PasswordStore::open(store_directory)?;
+    let gpg = GpgCommand::from_environment();
+    let data = std::fs::read_to_string(&command.file)
+        .map_err(|e| CliError::ImportFailed(format!("cannot read '{}': {}", command.file.display(), e)))?;
+
+    let result = ImportEntries::new(&store, &gpg)
+        .execute(&BitwardenImporter, &data, command.force)?;
+
+    auto_commit(&store, &format!("Imported {} entries from Bitwarden", result.imported))?;
+
+    if command.json {
+        print_json_import(&result, "Bitwarden")?;
+    } else {
+        print_text_import(&result, "Bitwarden");
+    }
+
+    Ok(())
+}
+
+fn print_text_import(result: &ImportResult, source: &str) {
+    println!("Imported {}/{} entries from {}", result.imported, result.imported + result.skipped, source);
+    for error in &result.errors {
+        eprintln!("  {}", error);
+    }
+}
+
+fn print_json_import(result: &ImportResult, source: &str) -> Result<(), CliError> {
+    #[derive(Serialize)]
+    struct ImportJson<'a> {
+        source: &'a str,
+        imported: usize,
+        skipped: usize,
+        errors: &'a [String],
+    }
+    let json = serde_json::to_string_pretty(&ImportJson {
+        source,
+        imported: result.imported,
+        skipped: result.skipped,
+        errors: &result.errors,
+    })?;
     println!("{json}");
     Ok(())
 }
@@ -1159,6 +1228,9 @@ pub enum CliError {
     #[error("doctor checks failed")]
     DoctorFailed,
 
+    #[error("import failed: {0}")]
+    ImportFailed(String),
+
     #[error("error already reported")]
     Reported,
 
@@ -1188,6 +1260,7 @@ impl CliError {
             Self::RemoveConfirmationRequired => "remove_confirmation_required",
             Self::RemoveAborted => "remove_aborted",
             Self::DoctorFailed => "doctor_checks_failed",
+            Self::ImportFailed(_) => "import_failed",
             Self::Reported => "reported",
             Self::NoEntryPoint => "no_entry_or_subcommand_provided",
         }

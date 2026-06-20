@@ -126,6 +126,9 @@ pub enum PasswordStoreError {
     #[error("recipient not found: {0}")]
     RecipientNotFound(String),
 
+    #[error("import failed: {0}")]
+    ImportFailed(String),
+
     #[error("failed to access password store: {0}")]
     Io(#[from] std::io::Error),
 }
@@ -155,6 +158,7 @@ impl PasswordStoreError {
             Self::OtpNotFound => "otp_not_found",
             Self::InvalidOtpUri(_) => "invalid_otp_uri",
             Self::RecipientNotFound(_) => "recipient_not_found",
+            Self::ImportFailed(_) => "import_failed",
             Self::Io(_) => "io_error",
         }
     }

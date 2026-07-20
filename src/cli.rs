@@ -18,7 +18,8 @@ use crate::password_store::importer::bitwarden::BitwardenImporter;
 use crate::password_store::{
     DecryptedEntry, DoctorReport, EditEntry, GitCommand, GpgCommand, ImportEntries, ImportResult,
     InitStore, InitStoreResult, InsertEntry, ListEntries, MoveEntry, OtpCode, PasswordStore,
-    Recipients, RecipientsResult, RemoveEntry, SearchEntries, ShowEntry, StoreDirectory,
+    ReEncryptEntries, Recipients, RecipientsResult, RemoveEntry, SearchEntries, ShowEntry,
+    StoreDirectory,
 };
 use tree_output::EntryTree;
 
@@ -496,6 +497,16 @@ fn init_store(command: InitCommand, store_directory: StoreDirectory) -> Result<(
     let result = InitStore::new(store_directory.clone())
         .execute(command.path.as_deref(), &command.gpg_ids)?;
     let store = PasswordStore::open(store_directory)?;
+
+    if !result.removed && !result.recipients.is_empty() {
+        let gpg = GpgCommand::from_environment();
+        ReEncryptEntries::new(&store, gpg).execute(
+            command.path.as_deref(),
+            &result.recipients,
+            None,
+        )?;
+    }
+
     auto_commit(&store, &init_commit_message(&command, &result))?;
 
     if command.json {
@@ -577,12 +588,24 @@ fn recipients(command: RecipientsCommand, store_directory: StoreDirectory) -> Re
         Some(RecipientsAction::Add { key_id }) => {
             let result = recipients.add(command.path.as_deref(), key_id)?;
             if result.changed {
+                let gpg = GpgCommand::from_environment();
+                ReEncryptEntries::new(&store, gpg).execute(
+                    command.path.as_deref(),
+                    &result.recipients,
+                    None,
+                )?;
                 auto_commit(&store, &format!("Added GPG id {key_id}."))?;
             }
             result
         }
         Some(RecipientsAction::Remove { key_id }) => {
             let result = recipients.remove(command.path.as_deref(), key_id)?;
+            let gpg = GpgCommand::from_environment();
+            ReEncryptEntries::new(&store, gpg).execute(
+                command.path.as_deref(),
+                &result.recipients,
+                None,
+            )?;
             auto_commit(&store, &format!("Removed GPG id {key_id}."))?;
             result
         }

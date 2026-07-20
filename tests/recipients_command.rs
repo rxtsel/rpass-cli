@@ -278,7 +278,10 @@ fn add_re_encrypts_existing_entries_with_new_recipient() {
         "bob should be a recipient after add; log: {log}"
     );
     let encrypt_count = log.lines().filter(|l| *l == "encrypt").count();
-    assert_eq!(encrypt_count, 1, "one entry should be re-encrypted; log: {log}");
+    assert_eq!(
+        encrypt_count, 1,
+        "one entry should be re-encrypted; log: {log}"
+    );
 }
 
 #[test]
@@ -316,7 +319,10 @@ fn remove_re_encrypts_existing_entries_without_removed_recipient() {
         "bob should NOT be a recipient after remove; log: {log}"
     );
     let encrypt_count = log.lines().filter(|l| *l == "encrypt").count();
-    assert_eq!(encrypt_count, 1, "one entry should be re-encrypted; log: {log}");
+    assert_eq!(
+        encrypt_count, 1,
+        "one entry should be re-encrypted; log: {log}"
+    );
 }
 
 #[test]
@@ -340,7 +346,10 @@ fn add_skips_re_encryption_when_recipient_already_present() {
         .success();
 
     let log = fs::read_to_string(&log_file).unwrap_or_default();
-    assert!(log.is_empty(), "no re-encryption when recipient already present; log: {log}");
+    assert!(
+        log.is_empty(),
+        "no re-encryption when recipient already present; log: {log}"
+    );
 }
 
 fn git<const N: usize>(path: &Path, args: [&str; N]) {

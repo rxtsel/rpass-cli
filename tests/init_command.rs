@@ -224,7 +224,10 @@ fn init_re_encrypts_existing_entries_with_new_recipients() {
         "expected new recipient in log, got: {log}"
     );
     let encrypt_count = log.lines().filter(|l| *l == "encrypt").count();
-    assert_eq!(encrypt_count, 2, "expected 2 entries re-encrypted, got: {encrypt_count}");
+    assert_eq!(
+        encrypt_count, 2,
+        "expected 2 entries re-encrypted, got: {encrypt_count}"
+    );
 
     assert_eq!(
         fs::read_to_string(store.path().join("entry.gpg")).expect("entry"),
@@ -271,7 +274,10 @@ fn init_skips_entries_in_subdirectory_with_own_gpg_id() {
 fn init_re_encrypts_only_entries_in_target_subfolder() {
     let store = tempfile::TempDir::new().expect("temp dir");
     write_file(store.path().join(".gpg-id"), "root@example.invalid\n");
-    write_file(store.path().join("team/.gpg-id"), "old-team@example.invalid\n");
+    write_file(
+        store.path().join("team/.gpg-id"),
+        "old-team@example.invalid\n",
+    );
     write_file(store.path().join("root-entry.gpg"), "root-secret\n");
     write_file(store.path().join("team/entry.gpg"), "team-secret\n");
 
@@ -321,7 +327,10 @@ fn init_skips_re_encryption_when_store_has_no_entries() {
         .stdout("Password store initialized for alice@example.invalid\n");
 
     let log = fs::read_to_string(&log_file).unwrap_or_default();
-    assert!(log.is_empty(), "no re-encryption should happen with empty store; log: {log}");
+    assert!(
+        log.is_empty(),
+        "no re-encryption should happen with empty store; log: {log}"
+    );
 }
 
 fn git<const N: usize>(path: &Path, args: [&str; N]) {

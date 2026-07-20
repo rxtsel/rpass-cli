@@ -29,7 +29,14 @@ impl<'store> ReEncryptEntries<'store> {
         };
 
         let mut reencrypted = Vec::new();
-        reencrypt_dir(&self.gpg, &target_dir, &target_dir, recipients, passphrase, &mut reencrypted)?;
+        reencrypt_dir(
+            &self.gpg,
+            &target_dir,
+            &target_dir,
+            recipients,
+            passphrase,
+            &mut reencrypted,
+        )?;
         Ok(reencrypted)
     }
 }
@@ -129,10 +136,7 @@ cat > "$output"
     #[test]
     #[cfg(not(windows))]
     fn re_encrypts_gpg_files_in_store() {
-        let temp = store_with_files(&[
-            (".gpg-id", "alice\n"),
-            ("entry.gpg", "secret\n"),
-        ]);
+        let temp = store_with_files(&[(".gpg-id", "alice\n"), ("entry.gpg", "secret\n")]);
         let (script, log) = passthrough_gpg_script(temp.path());
         let store = PasswordStore::open(StoreDirectory::from_path(temp.path())).expect("store");
         let gpg = GpgCommand::new(script);
@@ -144,7 +148,10 @@ cat > "$output"
         assert_eq!(result.len(), 1);
         let log_content = fs::read_to_string(log).expect("log");
         assert!(log_content.contains("recipient:alice"));
-        assert_eq!(fs::read_to_string(temp.path().join("entry.gpg")).expect("entry"), "secret\n");
+        assert_eq!(
+            fs::read_to_string(temp.path().join("entry.gpg")).expect("entry"),
+            "secret\n"
+        );
     }
 
     #[test]

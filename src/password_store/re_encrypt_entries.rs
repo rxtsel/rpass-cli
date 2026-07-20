@@ -32,7 +32,6 @@ impl<'store> ReEncryptEntries<'store> {
         reencrypt_dir(
             &self.gpg,
             &target_dir,
-            &target_dir,
             recipients,
             passphrase,
             &mut reencrypted,
@@ -44,7 +43,6 @@ impl<'store> ReEncryptEntries<'store> {
 fn reencrypt_dir(
     gpg: &GpgCommand,
     dir: &Path,
-    target_dir: &Path,
     recipients: &[String],
     passphrase: Option<&str>,
     reencrypted: &mut Vec<PathBuf>,
@@ -59,11 +57,10 @@ fn reencrypt_dir(
 
         if path.is_dir() {
             if path.join(".gpg-id").exists() {
-                // This subdir manages its own recipients — skip it entirely
                 continue;
             }
-            reencrypt_dir(gpg, &path, target_dir, recipients, passphrase, reencrypted)?;
-        } else if path.extension().map_or(false, |ext| ext == "gpg") {
+            reencrypt_dir(gpg, &path, recipients, passphrase, reencrypted)?;
+        } else if path.extension().is_some_and(|ext| ext == "gpg") {
             let plaintext = gpg.decrypt(&path, passphrase)?;
             gpg.encrypt(&plaintext, &path, recipients)?;
             reencrypted.push(path);

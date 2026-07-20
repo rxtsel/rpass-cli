@@ -113,7 +113,6 @@ rpass completions powershell >> $PROFILE
 **Known differences from `pass`:**
 - `generate`, `insert`, `edit`, `rm`, and `mv` for writes
 - Git is explicit (`rpass git <args>`) rather than automatic
-- Changing recipients with `init` does not re-encrypt existing entries
 - Clipboard and QR codes are not implemented
 - Unsupported `pass` flags are rejected instead of ignored
 

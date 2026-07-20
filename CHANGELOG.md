@@ -5,6 +5,36 @@ All notable changes to this project will be documented in this file.
 This project uses [Conventional Commits](https://www.conventionalcommits.org/)
 and release automation with release-plz.
 
+## [0.1.17](https://github.com/rxtsel/rpass-cli/compare/v0.1.16...v0.1.17) - 2026-07-20
+
+### 🚀 Features
+
+- *(password_store)* Re-encrypt entries when recipients change on init and recipients commands
+
+
+### 🚜 Refactor
+
+- *(password_store)* Remove unused target_dir param and use is_some_and for extension check
+
+
+### 📚 Documentation
+
+- Remove outdated known-difference about init not re-encrypting
+
+
+### 🧪 Testing
+
+- Add integration tests for re-encryption on init and recipients add/remove
+
+- Remove redundant unit tests covered by integration tests
+
+
+### ⚙️ Miscellaneous Tasks
+
+- *(fmt)* Format code
+
+
+
 ## [0.1.16](https://github.com/rxtsel/rpass-cli/compare/v0.1.15...v0.1.16) - 2026-06-20
 
 ### 🚀 Features

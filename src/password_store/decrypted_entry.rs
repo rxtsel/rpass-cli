@@ -13,16 +13,19 @@ impl DecryptedEntry {
         let mut lines = content.lines();
         let password = lines.next().unwrap_or_default().to_owned();
         let mut fields = Vec::new();
-        let mut otp_uri = None;
+        let mut otp_uri = otp_uri_from_line(&password).map(str::to_owned);
         let mut extra_lines = Vec::new();
 
         for line in lines {
-            if is_otp_uri(line) {
-                otp_uri = Some(line.to_owned());
+            if let Some(uri) = otp_uri_from_line(line) {
+                otp_uri = Some(uri.to_owned());
                 continue;
             }
 
             if let Some(field) = EntryField::parse(line) {
+                if let Some(uri) = otp_uri_from_line(&field.value) {
+                    otp_uri = Some(uri.to_owned());
+                }
                 fields.push(field);
                 continue;
             }
@@ -61,8 +64,9 @@ impl EntryField {
     }
 }
 
-fn is_otp_uri(line: &str) -> bool {
-    line.starts_with("otpauth://")
+fn otp_uri_from_line(line: &str) -> Option<&str> {
+    let line = line.trim();
+    line.starts_with("otpauth://").then_some(line)
 }
 
 #[cfg(test)]
@@ -104,6 +108,23 @@ notes without separator
                 extra_lines: vec!["notes without separator".to_string()],
             }
         );
+    }
+
+    #[test]
+    fn recognizes_otp_on_first_line_with_whitespace_or_in_a_field() {
+        let uri = "otpauth://totp/Stripe?secret=JBSWY3DPEHPK3PXP&issuer=Stripe";
+        for content in [
+            uri.to_owned(),
+            format!("secret\n  {uri}  \r\n"),
+            format!("secret\notp: {uri}\n"),
+        ] {
+            let entry = DecryptedEntry::parse(&content);
+            assert_eq!(entry.otp_uri.as_deref(), Some(uri));
+        }
+        let entry = DecryptedEntry::parse(uri);
+        assert_eq!(entry.password, uri);
+        let entry = DecryptedEntry::parse(&format!("secret\notp: {uri}\n"));
+        assert_eq!(entry.fields[0].value, uri);
     }
 
     #[test]

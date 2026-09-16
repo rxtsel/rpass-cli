@@ -97,6 +97,22 @@ mod tests {
     use totp_rs::TotpUrlError;
 
     #[test]
+    fn generates_stripe_codes_from_supported_entry_layouts() {
+        // Public RFC 6238 test secret; timestamp 59 produces 94287082 (8 digits).
+        let uri = "otpauth://totp/Stripe?secret=GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ&issuer=Stripe";
+        for content in [
+            uri.to_owned(),
+            format!("password\n{uri}\n"),
+            format!("password\n  {uri}  \r\n"),
+            format!("password\notp: {uri}\n"),
+        ] {
+            let entry = DecryptedEntry::parse(&content);
+            let otp = OtpCode::generate_at(&entry, 59).expect("Stripe OTP");
+            assert_eq!(otp.code, "287082");
+        }
+    }
+
+    #[test]
     fn generates_deterministic_totp_code() {
         let entry = DecryptedEntry::parse(
             "\

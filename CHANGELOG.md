@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 This project uses [Conventional Commits](https://www.conventionalcommits.org/)
 and release automation with release-plz.
 
+## [0.1.18](https://github.com/rxtsel/rpass-cli/compare/v0.1.17...v0.1.18) - 2026-09-16
+
+### 🐛 Bug Fixes
+
+- *(otp)* Detect uris in first lines and metadata fields
+
+
+### 🧪 Testing
+
+- *(otp)* Verify stripe codes across entry layouts
+
+
+
 ## [0.1.17](https://github.com/rxtsel/rpass-cli/compare/v0.1.16...v0.1.17) - 2026-07-20
 
 ### 🚀 Features

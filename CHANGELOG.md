@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 This project uses [Conventional Commits](https://www.conventionalcommits.org/)
 and release automation with release-plz.
 
+## [0.1.19](https://github.com/rxtsel/rpass-cli/compare/v0.1.18...v0.1.19) - 2026-10-29
+
+### 🐛 Bug Fixes
+
+- *(gpg)* Avoid forwarding piped input to decrypt
+
+
+### 📚 Documentation
+
+- *(shell)* Document completion setup
+
+
+
 ## [0.1.18](https://github.com/rxtsel/rpass-cli/compare/v0.1.17...v0.1.18) - 2026-09-16
 
 ### 🐛 Bug Fixes

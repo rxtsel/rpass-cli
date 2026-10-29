@@ -93,10 +93,20 @@ printf 'gpg-passphrase\n' | rpass otp example/login --json --passphrase-stdin
 
 ## Shell Completions
 
-```bash
+```sh
+# Bash
 rpass completions bash >> ~/.bashrc
+
+# Zsh
 rpass completions zsh > "${fpath[1]}/_rpass"
+# Initialize completions now; also add these two lines to ~/.zshrc if your Zsh framework does not already run compinit.
+autoload -Uz compinit
+compinit
+
+# Fish
 rpass completions fish > ~/.config/fish/completions/rpass.fish
+
+# PowerShell
 rpass completions powershell >> $PROFILE
 ```
 

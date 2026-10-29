@@ -1,7 +1,7 @@
 use std::env;
 use std::ffi::OsString;
 use std::fs;
-use std::io::Write;
+use std::io::{IsTerminal, Write};
 use std::path::Path;
 use std::process::{ChildStdin, Command, Output, Stdio};
 
@@ -62,6 +62,10 @@ impl GpgCommand {
     fn interactive_decrypt_command(&self) -> Command {
         let mut cmd = Command::new(&self.program);
         cmd.arg("--quiet").arg("--yes");
+        // Preserve terminal detection without consuming piped input from third-party callers.
+        if std::io::stdin().is_terminal() {
+            cmd.stdin(Stdio::inherit());
+        }
         cmd
     }
 

@@ -22,7 +22,7 @@ rpass git status
 - **JSON output** — structured responses for Raycast, Vicinae, and custom integrations
 - **Import** — migrate from other password managers ([docs](docs/import.md))
 - **TOTP support** — generate one-time codes from `otpauth://` lines
-- **Git integration** — explicit `rpass git <args>` commands; write commands auto-commit
+- **Git integration** — explicit `rpass git <args>` commands; write commands auto-commit only the `.gpg` and `.gpg-id` files they change (`.rpass-backup-*` directories are reserved for recovery and never auto-committed)
 - **Shell completions** — Bash, Zsh, Fish, PowerShell
 - **Non-interactive** — `--passphrase-stdin` for headless environments
 - **External GPG** — no embedded crypto; uses your existing GnuPG installation
@@ -44,7 +44,7 @@ The crates.io package is `rpass-cli`; the installed binary is `rpass`.
 ## Requirements
 
 - **GnuPG 2.x** (`gpg`) — install via Gpg4win (Windows), Homebrew (macOS), or your system package manager (Linux)
-- **Git** — optional, only needed for `rpass git ...`
+- **Git** — required for `rpass git ...` and writes to an existing Git-backed store; otherwise optional
 
 ## Quick Start
 
@@ -73,7 +73,7 @@ rpass doctor                              # check your local setup
 
 ## JSON Output
 
-Most read commands accept `--json`. On success, stdout contains the JSON value and stderr is empty. On error, the exit code is non-zero and stderr contains:
+Most read commands accept `--json`. On success, stdout contains the JSON value and stderr is empty. On error, the exit code is non-zero and stderr contains an error. If a write succeeds but its automatic Git commit fails, stdout still reports what changed (including any generated password); check both streams before retrying. Errors look like:
 
 ```json
 {
@@ -112,8 +112,9 @@ rpass completions powershell >> $PROFILE
 
 **Known differences from `pass`:**
 - `generate`, `insert`, `edit`, `rm`, and `mv` for writes
-- Git is explicit (`rpass git <args>`) rather than automatic
+- Git commands are explicit (`rpass git <args>`); writes auto-commit only when the store is a Git repository. `rpass git init` accepts only branch and quiet options, so it cannot initialize a different directory or a bare repository
 - Changing recipients with `init` does not re-encrypt existing entries
+- Moving entries between folders with different recipients is refused; re-encrypt them for the new recipients first
 - Clipboard and QR codes are not implemented
 - Unsupported `pass` flags are rejected instead of ignored
 

@@ -496,8 +496,6 @@ fn init_store(command: InitCommand, store_directory: StoreDirectory) -> Result<(
     let result = InitStore::new(store_directory.clone())
         .execute(command.path.as_deref(), &command.gpg_ids)?;
     let store = PasswordStore::open(store_directory)?;
-    auto_commit(&store, &init_commit_message(&command, &result))?;
-
     if command.json {
         print_json_init(&result)?;
     } else if result.removed {
@@ -506,6 +504,11 @@ fn init_store(command: InitCommand, store_directory: StoreDirectory) -> Result<(
         print_init_success(&command);
     }
 
+    auto_commit(
+        &store,
+        &init_commit_message(&command, &result),
+        std::slice::from_ref(&result.gpg_id_path),
+    )?;
     Ok(())
 }
 
@@ -575,16 +578,10 @@ fn recipients(command: RecipientsCommand, store_directory: StoreDirectory) -> Re
     let recipients = Recipients::new(&store);
     let result = match &command.action {
         Some(RecipientsAction::Add { key_id }) => {
-            let result = recipients.add(command.path.as_deref(), key_id)?;
-            if result.changed {
-                auto_commit(&store, &format!("Added GPG id {key_id}."))?;
-            }
-            result
+            recipients.add(command.path.as_deref(), key_id)?
         }
         Some(RecipientsAction::Remove { key_id }) => {
-            let result = recipients.remove(command.path.as_deref(), key_id)?;
-            auto_commit(&store, &format!("Removed GPG id {key_id}."))?;
-            result
+            recipients.remove(command.path.as_deref(), key_id)?
         }
         None => recipients.list(command.path.as_deref())?,
     };
@@ -595,6 +592,19 @@ fn recipients(command: RecipientsCommand, store_directory: StoreDirectory) -> Re
         print_text_recipients(&command, &result);
     }
 
+    match &command.action {
+        Some(RecipientsAction::Add { key_id }) if result.changed => auto_commit(
+            &store,
+            &format!("Added GPG id {key_id}."),
+            std::slice::from_ref(&result.gpg_id_path),
+        )?,
+        Some(RecipientsAction::Remove { key_id }) => auto_commit(
+            &store,
+            &format!("Removed GPG id {key_id}."),
+            std::slice::from_ref(&result.gpg_id_path),
+        )?,
+        _ => {}
+    }
     Ok(())
 }
 
@@ -665,15 +675,14 @@ fn insert_entry(command: InsertCommand, store_directory: StoreDirectory) -> Resu
     let content = command_entry_content(&command.entry, command.multiline, command.echo)?;
 
     InsertEntry::new(&store, &gpg).execute(&command.entry, &content, command.force)?;
-    auto_commit(
-        &store,
-        &format!("Added given password for {} to store.", command.entry),
-    )?;
-
     if command.json {
         print_json_insert(&command.entry)?;
     }
-
+    auto_commit(
+        &store,
+        &format!("Added given password for {} to store.", command.entry),
+        &[entry_git_path(&command.entry)],
+    )?;
     Ok(())
 }
 
@@ -693,18 +702,23 @@ fn import_entries(command: ImportCommand, store_directory: StoreDirectory) -> Re
     let result =
         ImportEntries::new(&store, &gpg).execute(&BitwardenImporter, &data, command.force)?;
 
-    auto_commit(
-        &store,
-        &format!("Imported {} entries from Bitwarden", result.imported),
-    )?;
-
     if command.json {
         print_json_import(&result, "Bitwarden")?;
     } else {
         print_text_import(&result, "Bitwarden");
     }
 
-    Ok(())
+    auto_commit(
+        &store,
+        &format!("Imported {} entries from Bitwarden", result.imported),
+        &result.written,
+    )?;
+
+    if result.errors.is_empty() {
+        Ok(())
+    } else {
+        Err(CliError::ImportIncomplete)
+    }
 }
 
 fn print_text_import(result: &ImportResult, source: &str) {
@@ -737,8 +751,12 @@ fn print_json_import(result: &ImportResult, source: &str) -> Result<(), CliError
     Ok(())
 }
 
-fn auto_commit(store: &PasswordStore, message: &str) -> Result<(), CliError> {
-    GitCommand::from_environment().auto_commit(store, message)?;
+fn entry_git_path(entry: &str) -> PathBuf {
+    PathBuf::from(format!("{entry}.gpg"))
+}
+
+fn auto_commit(store: &PasswordStore, message: &str, changed: &[PathBuf]) -> Result<(), CliError> {
+    GitCommand::from_environment().auto_commit(store, message, changed)?;
     Ok(())
 }
 
@@ -749,13 +767,16 @@ fn edit_entry(command: EditCommand, store_directory: StoreDirectory) -> Result<(
     let changed = EditEntry::new(&store, &gpg).execute(&command.entry)?;
 
     if changed {
-        auto_commit(&store, &format!("Edited password for {}.", command.entry))?;
-
         if command.json {
             print_json_insert(&command.entry)?;
         } else {
             println!("Entry '{}' updated", command.entry);
         }
+        auto_commit(
+            &store,
+            &format!("Edited password for {}.", command.entry),
+            &[entry_git_path(&command.entry)],
+        )?;
     }
 
     Ok(())
@@ -766,14 +787,16 @@ fn remove_entry(command: RemoveCommand, store_directory: StoreDirectory) -> Resu
 
     let store = PasswordStore::open(store_directory)?;
     RemoveEntry::new(&store).execute(&command.entry)?;
-    auto_commit(&store, &format!("Removed {} from store.", command.entry))?;
-
     if command.json {
         print_json_insert(&command.entry)?;
     } else {
         println!("Entry '{}' removed", command.entry);
     }
-
+    auto_commit(
+        &store,
+        &format!("Removed {} from store.", command.entry),
+        &[entry_git_path(&command.entry)],
+    )?;
     Ok(())
 }
 
@@ -797,12 +820,23 @@ fn confirm_remove(command: &RemoveCommand) -> Result<(), CliError> {
 
 fn move_entry(command: MoveCommand, store_directory: StoreDirectory) -> Result<(), CliError> {
     let store = PasswordStore::open(store_directory)?;
+    let directory = !store
+        .path()
+        .join(entry_git_path(&command.old_entry))
+        .exists()
+        && store.path().join(&command.old_entry).is_dir();
     MoveEntry::new(&store).execute(&command.old_entry, &command.new_entry, command.force)?;
-    auto_commit(
-        &store,
-        &format!("Renamed {} to {}.", command.old_entry, command.new_entry),
-    )?;
-
+    let changed = if directory {
+        vec![
+            PathBuf::from(&command.old_entry),
+            PathBuf::from(&command.new_entry),
+        ]
+    } else {
+        vec![
+            entry_git_path(&command.old_entry),
+            entry_git_path(&command.new_entry),
+        ]
+    };
     if command.json {
         print_json_move(&command.old_entry, &command.new_entry)?;
     } else {
@@ -811,7 +845,11 @@ fn move_entry(command: MoveCommand, store_directory: StoreDirectory) -> Result<(
             command.old_entry, command.new_entry
         );
     }
-
+    auto_commit(
+        &store,
+        &format!("Renamed {} to {}.", command.old_entry, command.new_entry),
+        &changed,
+    )?;
     Ok(())
 }
 
@@ -847,7 +885,9 @@ fn generate_entry(
 
     let password = generated_secret(&command)?;
 
-    if !command.dry_run {
+    let saved = if command.dry_run {
+        None
+    } else {
         let entry = command
             .entry
             .as_deref()
@@ -855,20 +895,22 @@ fn generate_entry(
         let store = PasswordStore::open(store_directory)?;
         let gpg = GpgCommand::from_environment();
         let content = format!("{password}\n");
-
         InsertEntry::new(&store, &gpg).execute(entry, &content, command.force)?;
-        auto_commit(
-            &store,
-            &format!("Added generated password for {entry} to store."),
-        )?;
-    }
+        Some((store, entry))
+    };
 
     if command.json {
         print_json_generate(command.entry.as_deref(), &password, command.dry_run)?;
     } else {
         println!("{password}");
     }
-
+    if let Some((store, entry)) = saved {
+        auto_commit(
+            &store,
+            &format!("Added generated password for {entry} to store."),
+            &[entry_git_path(entry)],
+        )?;
+    }
     Ok(())
 }
 
@@ -1237,6 +1279,9 @@ pub enum CliError {
     #[error("import failed: {0}")]
     ImportFailed(String),
 
+    #[error("import incomplete: some entries could not be saved")]
+    ImportIncomplete,
+
     #[error("error already reported")]
     Reported,
 
@@ -1267,6 +1312,7 @@ impl CliError {
             Self::RemoveAborted => "remove_aborted",
             Self::DoctorFailed => "doctor_checks_failed",
             Self::ImportFailed(_) => "import_failed",
+            Self::ImportIncomplete => "import_incomplete",
             Self::Reported => "reported",
             Self::NoEntryPoint => "no_entry_or_subcommand_provided",
         }

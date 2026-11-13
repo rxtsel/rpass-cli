@@ -32,14 +32,25 @@ impl Importer for BitwardenImporter {
         let folders = build_folder_map(&root);
         let mut entries = Vec::new();
 
-        for item in items {
-            if let Some(entry) = parse_item(item, &folders) {
-                entries.push(entry);
+        for (index, item) in items.iter().enumerate() {
+            let entry =
+                parse_item(item, &folders).ok_or(ImportError::InvalidItemName(index + 1))?;
+            if entry
+                .password
+                .as_deref()
+                .is_some_and(|password| password.contains(['\r', '\n']))
+            {
+                return Err(ImportError::MultilinePassword(index + 1));
             }
-        }
-
-        if entries.is_empty() {
-            return Err(ImportError::NoEntries);
+            if entry.fields.iter().any(|field| {
+                field.name.contains([':', '\r', '\n'])
+                    || field.name.trim() != field.name
+                    || field.value.contains(['\r', '\n'])
+                    || field.value.trim() != field.value
+            }) {
+                return Err(ImportError::InvalidField(index + 1));
+            }
+            entries.push(entry);
         }
 
         Ok(entries)
@@ -217,7 +228,11 @@ fn normalize_totp(totp: &str, name: &str) -> String {
     if totp.starts_with("otpauth://") {
         totp.to_owned()
     } else {
-        format!("otpauth://totp/{name}?secret={totp}")
+        format!(
+            "otpauth://totp/{}?secret={}",
+            urlencoding::encode(name),
+            urlencoding::encode(totp)
+        )
     }
 }
 
@@ -281,6 +296,15 @@ mod tests {
         );
         assert!(entry.otp_uri.as_deref().unwrap().starts_with("otpauth://"));
         assert_eq!(entry.notes.as_deref(), Some("My Twitter account"));
+    }
+
+    #[test]
+    fn rejects_mixed_export_with_unnamed_item_before_writing_anything() {
+        let data = r#"{"items":[{"name":"valid","login":{"password":"secret"}},{"name":""}]}"#;
+        assert!(matches!(
+            BitwardenImporter.parse(data),
+            Err(ImportError::InvalidItemName(2))
+        ));
     }
 
     #[test]
@@ -398,6 +422,18 @@ mod tests {
             normalize_totp("JBSWY3DPEHPK3PXP", "test"),
             "otpauth://totp/test?secret=JBSWY3DPEHPK3PXP"
         );
+    }
+
+    #[test]
+    fn raw_totp_with_punctuation_in_title_stays_usable() {
+        use crate::password_store::{DecryptedEntry, OtpCode};
+
+        for (name, encoded) in [("A?B", "A%3FB"), ("100%", "100%25"), ("A#B", "A%23B")] {
+            let uri = normalize_totp("KRSXG5CTMVRXEZLUKN2XAZLSKNSWG4TFOQ", name);
+            assert!(uri.contains(&format!("/{encoded}?secret=")));
+            let entry = DecryptedEntry::parse(&format!("password\n{uri}\n"));
+            assert_eq!(OtpCode::generate_at(&entry, 1000).unwrap().code.len(), 6);
+        }
     }
 
     #[test]

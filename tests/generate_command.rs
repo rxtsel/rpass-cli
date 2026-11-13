@@ -53,6 +53,37 @@ fn generates_default_password_and_inserts_entry() {
 }
 
 #[test]
+fn rejects_multiline_generated_secrets_before_writing() {
+    let store = tempfile::TempDir::new().unwrap();
+    fs::write(store.path().join(".gpg-id"), "alice\n").unwrap();
+    for options in [
+        vec![
+            "--no-lowercase",
+            "--no-uppercase",
+            "--no-numbers",
+            "--symbols",
+            "\n",
+            "--length",
+            "1",
+        ],
+        vec!["--phrase", "--separator", "\r"],
+    ] {
+        rpass()
+            .args([
+                "--store-dir",
+                store.path().to_str().unwrap(),
+                "generate",
+                "entry",
+            ])
+            .args(options)
+            .assert()
+            .failure()
+            .stderr(predicate::str::contains("one line"));
+        assert!(!store.path().join("entry.gpg").exists());
+    }
+}
+
+#[test]
 fn generates_custom_length_without_symbols() {
     let store = tempfile::TempDir::new().expect("temp dir");
     fs::write(store.path().join(".gpg-id"), "alice@example.invalid\n").expect("gpg id");
@@ -103,6 +134,41 @@ fn generates_json_output_for_integrations() {
 
     assert_eq!(output["name"], "example/login");
     assert_eq!(password.chars().count(), 14);
+}
+
+#[test]
+fn git_failure_still_reports_saved_generated_password() {
+    let store = tempfile::TempDir::new().unwrap();
+    fs::write(store.path().join(".gpg-id"), "alice\n").unwrap();
+    assert!(
+        std::process::Command::new("git")
+            .arg("-C")
+            .arg(store.path())
+            .arg("init")
+            .status()
+            .unwrap()
+            .success()
+    );
+    let assert = rpass()
+        .env("PASSWORD_STORE_GPG", encrypting_gpg_script(store.path()))
+        .env("GIT_AUTHOR_NAME", "")
+        .env("GIT_COMMITTER_NAME", "")
+        .args([
+            "--store-dir",
+            store.path().to_str().unwrap(),
+            "generate",
+            "entry",
+            "--json",
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("\"code\": \"git_failed\""));
+    let output: Value = serde_json::from_slice(&assert.get_output().stdout).unwrap();
+    let password = output["password"].as_str().unwrap();
+    assert_eq!(
+        fs::read_to_string(store.path().join("entry.gpg")).unwrap(),
+        format!("{password}\n")
+    );
 }
 
 #[test]

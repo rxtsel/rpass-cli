@@ -21,6 +21,7 @@ impl<'store> Recipients<'store> {
 
     pub fn list(&self, subfolder: Option<&str>) -> Result<RecipientsResult, PasswordStoreError> {
         let gpg_id_path = gpg_id_path(self.store.path(), subfolder);
+        self.store.check_path(&gpg_id_path)?;
         let recipients = read_recipients(&gpg_id_path)?;
 
         Ok(RecipientsResult {
@@ -35,7 +36,9 @@ impl<'store> Recipients<'store> {
         subfolder: Option<&str>,
         recipient: &str,
     ) -> Result<RecipientsResult, PasswordStoreError> {
+        validate_recipient(recipient)?;
         let gpg_id_path = gpg_id_path(self.store.path(), subfolder);
+        self.store.check_path(&gpg_id_path)?;
         let mut recipients = read_recipients(&gpg_id_path)?;
         let changed = !recipients.iter().any(|existing| existing == recipient);
 
@@ -57,6 +60,7 @@ impl<'store> Recipients<'store> {
         recipient: &str,
     ) -> Result<RecipientsResult, PasswordStoreError> {
         let gpg_id_path = gpg_id_path(self.store.path(), subfolder);
+        self.store.check_path(&gpg_id_path)?;
         let mut recipients = read_recipients(&gpg_id_path)?;
         let original_len = recipients.len();
         recipients.retain(|existing| existing != recipient);
@@ -73,6 +77,17 @@ impl<'store> Recipients<'store> {
             changed: true,
         })
     }
+}
+
+pub(super) fn validate_recipient(recipient: &str) -> Result<(), PasswordStoreError> {
+    if recipient.is_empty()
+        || recipient.contains(['\r', '\n'])
+        || recipient.trim() != recipient
+        || recipient.starts_with('#')
+    {
+        return Err(PasswordStoreError::InvalidRecipient);
+    }
+    Ok(())
 }
 
 fn gpg_id_path(store_root: &Path, subfolder: Option<&str>) -> PathBuf {
@@ -102,7 +117,7 @@ fn read_recipients(path: &Path) -> Result<Vec<String>, PasswordStoreError> {
 }
 
 fn write_recipients(path: &Path, recipients: &[String]) -> Result<(), PasswordStoreError> {
-    fs::write(path, recipients.join("\n") + "\n")?;
+    super::store_directory::atomic_write(path, (recipients.join("\n") + "\n").as_bytes())?;
     Ok(())
 }
 

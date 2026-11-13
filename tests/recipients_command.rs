@@ -104,6 +104,29 @@ fn adds_recipient_without_duplicates() {
 }
 
 #[test]
+fn add_rejects_recipient_with_line_break_without_changing_recipients() {
+    let store = tempfile::TempDir::new().unwrap();
+    write_file(store.path().join(".gpg-id"), "original\n");
+    for recipient in ["alice\nbob", "alice\rbob", "# ignored", " alice"] {
+        rpass()
+            .args([
+                "--store-dir",
+                store.path().to_str().unwrap(),
+                "recipients",
+                "add",
+                recipient,
+            ])
+            .assert()
+            .failure()
+            .stderr(predicate::str::contains("invalid recipient"));
+        assert_eq!(
+            fs::read(store.path().join(".gpg-id")).unwrap(),
+            b"original\n"
+        );
+    }
+}
+
+#[test]
 fn adds_recipient_to_subfolder() {
     let store = tempfile::TempDir::new().expect("temp dir");
     write_file(store.path().join("team/.gpg-id"), "alice@example.invalid\n");

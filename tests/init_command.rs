@@ -32,6 +32,28 @@ fn init_creates_missing_store_and_writes_gpg_id() {
 }
 
 #[test]
+fn init_rejects_recipient_with_line_break_without_changing_recipients() {
+    let store = tempfile::TempDir::new().unwrap();
+    fs::write(store.path().join(".gpg-id"), "original\n").unwrap();
+    for recipient in ["alice\nbob", "alice\rbob", "# ignored", " alice"] {
+        rpass()
+            .args([
+                "--store-dir",
+                store.path().to_str().unwrap(),
+                "init",
+                recipient,
+            ])
+            .assert()
+            .failure()
+            .stderr(predicate::str::contains("invalid recipient"));
+        assert_eq!(
+            fs::read(store.path().join(".gpg-id")).unwrap(),
+            b"original\n"
+        );
+    }
+}
+
+#[test]
 fn init_accepts_multiple_gpg_ids() {
     let store = tempfile::TempDir::new().expect("temp dir");
 
@@ -76,6 +98,25 @@ fn init_path_writes_gpg_id_for_subfolder() {
         fs::read_to_string(store.path().join("team/work/.gpg-id")).expect("gpg id"),
         "team@example.invalid\n"
     );
+}
+
+#[test]
+fn init_rejects_hidden_or_multiline_recipient_path() {
+    let store = tempfile::TempDir::new().unwrap();
+    for path in [".git", "foo\nbar"] {
+        rpass()
+            .args([
+                "--store-dir",
+                store.path().to_str().unwrap(),
+                "init",
+                "--path",
+                path,
+                "alice",
+            ])
+            .assert()
+            .failure();
+        assert!(!store.path().join(path).exists());
+    }
 }
 
 #[test]
@@ -164,6 +205,26 @@ fn init_rejects_path_traversal_subfolder_as_json() {
         .failure()
         .stdout("")
         .stderr(predicate::str::contains("\"code\": \"invalid_init_path\""));
+}
+
+#[cfg(unix)]
+#[test]
+fn init_rejects_symlinked_recipient_file() {
+    let store = tempfile::TempDir::new().unwrap();
+    let outside = tempfile::NamedTempFile::new().unwrap();
+    fs::write(outside.path(), "original\n").unwrap();
+    std::os::unix::fs::symlink(outside.path(), store.path().join(".gpg-id")).unwrap();
+    rpass()
+        .args([
+            "--store-dir",
+            store.path().to_str().unwrap(),
+            "init",
+            "alice",
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("outside the password store"));
+    assert_eq!(fs::read_to_string(outside.path()).unwrap(), "original\n");
 }
 
 #[test]

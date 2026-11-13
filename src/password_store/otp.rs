@@ -20,6 +20,16 @@ impl OtpCode {
         let normalized_uri = normalize_otp_uri(otp_uri)?;
         let totp = TOTP::from_url_unchecked(&normalized_uri)
             .map_err(|e| PasswordStoreError::InvalidOtpUri(totp_error_message(e)))?;
+        if totp.step == 0 {
+            return Err(PasswordStoreError::InvalidOtpUri(
+                "invalid period: 0".to_owned(),
+            ));
+        }
+        if !(6..=8).contains(&totp.digits) {
+            return Err(PasswordStoreError::InvalidOtpUri(totp_error_message(
+                TotpUrlError::DigitsNumber(totp.digits),
+            )));
+        }
 
         Ok(Self {
             code: totp.generate(timestamp),
@@ -115,6 +125,21 @@ otpauth://totp/GitHub:test?secret=KRSXG5CTMVRXEZLUKN2XAZLSKNSWG4TFOQ
                 period: 30,
             }
         );
+    }
+
+    #[test]
+    fn rejects_zero_period_and_unsupported_digit_counts() {
+        for (parameter, expected) in [
+            ("period=0", "invalid period"),
+            ("digits=0", "invalid digits count"),
+            ("digits=11", "invalid digits count"),
+        ] {
+            let entry = DecryptedEntry::parse(&format!(
+                "password\notpauth://totp/example?secret=KRSXG5CTMVRXEZLUKN2XAZLSKNSWG4TFOQ&{parameter}\n"
+            ));
+            let error = OtpCode::generate_at(&entry, 1000).unwrap_err();
+            assert!(error.to_string().contains(expected), "{parameter}: {error}");
+        }
     }
 
     #[test]

@@ -1,4 +1,6 @@
 use std::env;
+use std::fs;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone)]
@@ -56,6 +58,59 @@ impl PasswordStore {
     pub fn path(&self) -> &Path {
         &self.path
     }
+
+    pub fn check_path(&self, path: &Path) -> Result<(), PasswordStoreError> {
+        check_store_path(&self.path, path)
+    }
+
+    pub fn check_read_path(&self, path: &Path) -> Result<(), PasswordStoreError> {
+        check_store_path_with_controls(&self.path, path, true)
+    }
+}
+
+pub(super) fn atomic_write(path: &Path, contents: &[u8]) -> Result<(), PasswordStoreError> {
+    let parent = path.parent().unwrap_or_else(|| Path::new("."));
+    let mut staged = tempfile::NamedTempFile::new_in(parent)?;
+    staged.write_all(contents)?;
+    staged.as_file().sync_all()?;
+    staged
+        .persist(path)
+        .map_err(|error| PasswordStoreError::Io(error.error))?;
+    Ok(())
+}
+
+// shortcut: this cannot stop concurrent symlink swaps; use handle-relative I/O if untrusted processes can modify the store.
+pub(super) fn check_store_path(root: &Path, path: &Path) -> Result<(), PasswordStoreError> {
+    check_store_path_with_controls(root, path, false)
+}
+
+fn check_store_path_with_controls(
+    root: &Path,
+    path: &Path,
+    allow_controls: bool,
+) -> Result<(), PasswordStoreError> {
+    let relative = path
+        .strip_prefix(root)
+        .map_err(|_| PasswordStoreError::EntryOutsideStore(path.to_path_buf()))?;
+    let mut current = root.to_path_buf();
+    for component in relative.components() {
+        current.push(component);
+        let name = component.as_os_str().to_string_lossy();
+        if super::entry_name::is_git_metadata_component(&name)
+            || !allow_controls && name.chars().any(char::is_control)
+        {
+            return Err(PasswordStoreError::EntryOutsideStore(current));
+        }
+        match fs::symlink_metadata(&current) {
+            Ok(metadata) if metadata.file_type().is_symlink() => {
+                return Err(PasswordStoreError::EntryOutsideStore(current));
+            }
+            Ok(_) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(error.into()),
+        }
+    }
+    Ok(())
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -74,6 +129,12 @@ pub enum PasswordStoreError {
 
     #[error("entry already exists: {0}")]
     EntryAlreadyExists(String),
+
+    #[error("source and destination overlap")]
+    InvalidMove,
+
+    #[error("source and destination have different GPG recipients")]
+    RecipientMismatch,
 
     #[error("entry does not exist: {0}")]
     EntryNotFound(String),
@@ -123,6 +184,11 @@ pub enum PasswordStoreError {
     #[error("entry contains an invalid otpauth URI: {0}")]
     InvalidOtpUri(String),
 
+    #[error(
+        "invalid recipient: expected one nonempty line without surrounding whitespace or a comment marker"
+    )]
+    InvalidRecipient,
+
     #[error("recipient not found: {0}")]
     RecipientNotFound(String),
 
@@ -141,6 +207,8 @@ impl PasswordStoreError {
             Self::HomeDirectoryUnavailable => "home_directory_unavailable",
             Self::EntryOutsideStore(_) => "entry_outside_store",
             Self::EntryAlreadyExists(_) => "entry_already_exists",
+            Self::InvalidMove => "invalid_move",
+            Self::RecipientMismatch => "recipient_mismatch",
             Self::EntryNotFound(_) => "entry_not_found",
             Self::EditorFailed(_) => "editor_failed",
             Self::InvalidEntryName { .. } => "invalid_entry_name",
@@ -157,6 +225,7 @@ impl PasswordStoreError {
             Self::GpgVersionFailed(_) => "gpg_version_failed",
             Self::OtpNotFound => "otp_not_found",
             Self::InvalidOtpUri(_) => "invalid_otp_uri",
+            Self::InvalidRecipient => "invalid_recipient",
             Self::RecipientNotFound(_) => "recipient_not_found",
             Self::ImportFailed(_) => "import_failed",
             Self::Io(_) => "io_error",

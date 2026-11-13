@@ -26,6 +26,7 @@ impl<'store, 'gpg> InsertEntry<'store, 'gpg> {
             }
         })?;
         let encrypted_file = entry_name.encrypted_file_path(self.store.path());
+        self.store.check_path(&encrypted_file)?;
 
         if encrypted_file.exists() && !force {
             return Err(PasswordStoreError::EntryAlreadyExists(
@@ -51,6 +52,7 @@ pub(super) fn recipients_for_entry(
 
     loop {
         let gpg_id = directory.join(".gpg-id");
+        super::store_directory::check_store_path(store_root, &gpg_id)?;
         if gpg_id.exists() {
             return read_recipients(&gpg_id);
         }

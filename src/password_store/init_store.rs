@@ -24,6 +24,15 @@ impl InitStore {
         subfolder: Option<&str>,
         recipients: &[String],
     ) -> Result<InitStoreResult, PasswordStoreError> {
+        let removed = recipients.len() == 1 && recipients.first().is_some_and(String::is_empty);
+        if !removed {
+            if recipients.is_empty() {
+                return Err(PasswordStoreError::InvalidRecipient);
+            }
+            for recipient in recipients {
+                super::recipients::validate_recipient(recipient)?;
+            }
+        }
         let store_root = self.store_directory.path();
         fs::create_dir_all(store_root)?;
 
@@ -31,15 +40,16 @@ impl InitStore {
             Some(subfolder) => store_root.join(subfolder),
             None => store_root.to_path_buf(),
         };
-        fs::create_dir_all(&target_directory)?;
-
         let gpg_id_path = target_directory.join(".gpg-id");
-        let removed = recipients.len() == 1 && recipients.first().is_some_and(String::is_empty);
-
+        super::store_directory::check_store_path(store_root, &gpg_id_path)?;
+        fs::create_dir_all(&target_directory)?;
         if removed {
             remove_gpg_id_if_present(&gpg_id_path)?;
         } else {
-            fs::write(&gpg_id_path, recipients.join("\n") + "\n")?;
+            super::store_directory::atomic_write(
+                &gpg_id_path,
+                (recipients.join("\n") + "\n").as_bytes(),
+            )?;
         }
 
         Ok(InitStoreResult {

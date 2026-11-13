@@ -39,6 +39,29 @@ fn inserts_multiline_entry_by_encrypting_stdin_with_store_recipients() {
 }
 
 #[test]
+fn refuses_entry_paths_hidden_from_listing() {
+    let store = tempfile::TempDir::new().unwrap();
+    fs::write(store.path().join(".gpg-id"), "alice\n").unwrap();
+    for name in [".git/hidden", "team/.git/hidden", "foo\nbar"] {
+        rpass()
+            .write_stdin("secret\n")
+            .args([
+                "--store-dir",
+                store.path().to_str().unwrap(),
+                "insert",
+                name,
+                "--json",
+            ])
+            .assert()
+            .failure()
+            .stderr(predicate::str::contains("invalid_entry_name"));
+    }
+    assert!(!store.path().join(".git/hidden.gpg").exists());
+    assert!(!store.path().join("team/.git/hidden.gpg").exists());
+    assert!(!store.path().join("foo\nbar.gpg").exists());
+}
+
+#[test]
 fn inserts_single_line_entry_from_stdin_without_multiline() {
     let store = tempfile::TempDir::new().expect("temp dir");
     fs::write(store.path().join(".gpg-id"), "alice@example.com\n").expect("gpg id");
@@ -166,6 +189,28 @@ fn inserts_entry_with_nearest_directory_recipients() {
         recipients.lines().collect::<Vec<_>>(),
         vec!["team@example.com"]
     );
+}
+
+#[cfg(unix)]
+#[test]
+fn refuses_to_encrypt_through_symlinked_directory() {
+    let store = tempfile::TempDir::new().unwrap();
+    let outside = tempfile::TempDir::new().unwrap();
+    fs::write(store.path().join(".gpg-id"), "alice\n").unwrap();
+    std::os::unix::fs::symlink(outside.path(), store.path().join("link")).unwrap();
+    rpass()
+        .env("PASSWORD_STORE_GPG", encrypting_gpg_script(store.path()))
+        .write_stdin("secret\n")
+        .args([
+            "--store-dir",
+            store.path().to_str().unwrap(),
+            "insert",
+            "link/secret",
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("outside the password store"));
+    assert!(!outside.path().join("secret.gpg").exists());
 }
 
 #[test]

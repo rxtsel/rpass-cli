@@ -335,14 +335,23 @@ impl GitCommand {
     }
 
     fn is_repository_optional(&self, store_root: &Path) -> Result<bool, PasswordStoreError> {
+        let has_git_metadata = match std::fs::symlink_metadata(store_root.join(".git")) {
+            Ok(_) => true,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => false,
+            Err(error) => return Err(error.into()),
+        };
         match self.raw_git(store_root, &["rev-parse", "--show-toplevel"]) {
             Ok(output) if output.status.success() => {
                 let top_level =
                     path_from_git(output.stdout.strip_suffix(b"\n").unwrap_or(&output.stdout));
                 Ok(top_level.canonicalize()? == store_root.canonicalize()?)
             }
+            Ok(output) if has_git_metadata => Err(PasswordStoreError::GitFailed {
+                exit_code: output.status.code().unwrap_or(1),
+                stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
+            }),
             Ok(_) => Ok(false),
-            Err(PasswordStoreError::GitNotFound) if !store_root.join(".git").exists() => Ok(false),
+            Err(PasswordStoreError::GitNotFound) if !has_git_metadata => Ok(false),
             Err(error) => Err(error),
         }
     }

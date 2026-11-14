@@ -288,6 +288,50 @@ fn case_only_move_works_before_the_first_commit() {
 }
 
 #[test]
+fn broken_git_metadata_reports_commit_failure_after_writing() {
+    let store = tempfile::TempDir::new().unwrap();
+    fs::write(store.path().join(".git"), "gitdir: missing-directory\n").unwrap();
+
+    rpass_with_git_identity()
+        .args([
+            "--store-dir",
+            store.path().to_str().unwrap(),
+            "init",
+            "--json",
+            "alice",
+        ])
+        .assert()
+        .failure()
+        .stdout(predicates::str::contains("\"recipients\": ["))
+        .stderr(predicates::str::contains("\"code\": \"git_failed\""));
+
+    assert_eq!(
+        fs::read_to_string(store.path().join(".gpg-id")).unwrap(),
+        "alice\n"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn dangling_git_metadata_does_not_silently_skip_commit() {
+    let store = tempfile::TempDir::new().unwrap();
+    std::os::unix::fs::symlink("missing-directory", store.path().join(".git")).unwrap();
+
+    rpass_with_git_identity()
+        .args([
+            "--store-dir",
+            store.path().to_str().unwrap(),
+            "init",
+            "--json",
+            "alice",
+        ])
+        .assert()
+        .failure()
+        .stderr(predicates::str::contains("\"code\": \"git_failed\""));
+    assert!(store.path().join(".gpg-id").exists());
+}
+
+#[test]
 fn nested_store_does_not_stage_files_in_parent_git_repository() {
     let parent = git_store();
     let before = commit_count(parent.path());

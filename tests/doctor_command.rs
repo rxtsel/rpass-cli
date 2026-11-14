@@ -50,10 +50,10 @@ fn reports_ready_environment_as_json() {
 #[test]
 fn rejects_empty_or_comment_only_recipient_file() {
     let store = TempDir::new().unwrap();
-    let gpg = successful_gpg_script(store.path(), "gpg (GnuPG) test\n");
+    let gpg = successful_gpg_script(store.path(), "gpg (GnuPG) 2.4.0\n");
     for contents in ["\n", "# no recipients\n"] {
         fs::write(store.path().join(".gpg-id"), contents).unwrap();
-        rpass()
+        let result = rpass()
             .env("PASSWORD_STORE_GPG", &gpg)
             .args([
                 "--store-dir",
@@ -62,9 +62,16 @@ fn rejects_empty_or_comment_only_recipient_file() {
                 "--json",
             ])
             .assert()
-            .failure()
-            .stdout(predicate::str::contains("\"ok\": false"))
-            .stdout(predicate::str::contains("\"name\": \"gpg_id\""));
+            .failure();
+        let report: serde_json::Value =
+            serde_json::from_slice(&result.get_output().stdout).unwrap();
+        assert_eq!(report["ok"], false);
+        let checks = report["checks"].as_array().unwrap();
+        assert!(
+            checks
+                .iter()
+                .any(|check| check["name"] == "gpg_id" && check["ok"] == false)
+        );
     }
 }
 

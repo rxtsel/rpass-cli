@@ -149,9 +149,9 @@ impl GpgCommand {
         let stdout =
             String::from_utf8(output.stdout).map_err(PasswordStoreError::GpgOutputNotUtf8)?;
         let version = first_line(&stdout);
-        if version.trim().is_empty() {
+        if !version.starts_with("gpg (GnuPG) 2.") {
             return Err(PasswordStoreError::GpgVersionFailed(
-                "gpg returned an empty version".to_owned(),
+                "expected GnuPG 2.x".to_owned(),
             ));
         }
         Ok(version.to_owned())

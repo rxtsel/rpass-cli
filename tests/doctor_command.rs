@@ -10,7 +10,7 @@ use support::{empty_success_gpg_script, rpass, successful_gpg_script};
 #[test]
 fn reports_ready_environment_as_text() {
     let store = password_store_with_gpg_id();
-    let gpg = successful_gpg_script(store.path(), "gpg (GnuPG) test\n");
+    let gpg = successful_gpg_script(store.path(), "gpg (GnuPG) 2.4.0\n");
 
     rpass()
         .env("PASSWORD_STORE_GPG", gpg)
@@ -30,7 +30,7 @@ fn reports_ready_environment_as_text() {
 #[test]
 fn reports_ready_environment_as_json() {
     let store = password_store_with_gpg_id();
-    let gpg = successful_gpg_script(store.path(), "gpg (GnuPG) test\n");
+    let gpg = successful_gpg_script(store.path(), "gpg (GnuPG) 2.4.0\n");
 
     rpass()
         .env("PASSWORD_STORE_GPG", gpg)
@@ -87,9 +87,29 @@ fn rejects_gpg_command_with_empty_version_output() {
 }
 
 #[test]
+fn rejects_non_gpg_and_unsupported_versions() {
+    let store = password_store_with_gpg_id();
+    for version in ["cargo 1.96.0\n", "gpg (GnuPG) 1.4.0\n"] {
+        let gpg = successful_gpg_script(store.path(), version);
+        rpass()
+            .env("PASSWORD_STORE_GPG", gpg)
+            .args([
+                "--store-dir",
+                store.path().to_str().unwrap(),
+                "doctor",
+                "--json",
+            ])
+            .assert()
+            .failure()
+            .stdout(predicate::str::contains("\"ok\": false"))
+            .stderr(predicate::str::contains("doctor_checks_failed"));
+    }
+}
+
+#[test]
 fn exits_with_failure_when_gpg_id_is_missing() {
     let store = TempDir::new().expect("temp dir");
-    let gpg = successful_gpg_script(store.path(), "gpg (GnuPG) test\n");
+    let gpg = successful_gpg_script(store.path(), "gpg (GnuPG) 2.4.0\n");
 
     rpass()
         .env("PASSWORD_STORE_GPG", gpg)

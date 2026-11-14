@@ -123,6 +123,37 @@ fn force_import_preserves_distinct_entries_with_the_same_name() {
 }
 
 #[test]
+fn force_import_keeps_case_variant_names_distinct() {
+    let store = tempfile::TempDir::new().unwrap();
+    fs::write(store.path().join(".gpg-id"), "alice\n").unwrap();
+    let export = store.path().join("export.json");
+    fs::write(&export, r#"{"items":[{"name":"Login","login":{"password":"one"}},{"name":"login","login":{"password":"two"}}]}"#).unwrap();
+    rpass()
+        .env("PASSWORD_STORE_GPG", encrypting_gpg_script(store.path()))
+        .args([
+            "--store-dir",
+            store.path().to_str().unwrap(),
+            "import",
+            "--bitwarden",
+            "--force",
+            export.to_str().unwrap(),
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Imported 2/2"));
+    assert!(
+        fs::read_to_string(store.path().join("Login.gpg"))
+            .unwrap()
+            .contains("one")
+    );
+    assert!(
+        fs::read_to_string(store.path().join("login-1.gpg"))
+            .unwrap()
+            .contains("two")
+    );
+}
+
+#[test]
 fn force_import_does_not_overwrite_unrelated_suffixed_entry() {
     let store = tempfile::TempDir::new().unwrap();
     fs::write(store.path().join(".gpg-id"), "alice\n").unwrap();

@@ -56,7 +56,8 @@ impl<'store, 'gpg> ImportEntries<'store, 'gpg> {
                 Ok(name) => {
                     imported += 1;
                     written.push(PathBuf::from(format!("{name}.gpg")));
-                    imported_names.insert(name);
+                    // shortcut: Unicode case folding can differ from the filesystem; use file identity if imports need those names.
+                    imported_names.insert(name.to_lowercase());
                 }
                 Err(PasswordStoreError::EntryAlreadyExists(name)) => {
                     let advice = if force {
@@ -112,7 +113,9 @@ impl<'store, 'gpg> ImportEntries<'store, 'gpg> {
         })?;
         let encrypted_file = entry_name.encrypted_file_path(self.store.path());
 
-        if !imported_names.contains(base_name) && (!encrypted_file.exists() || force) {
+        if !imported_names.contains(&base_name.to_lowercase())
+            && (!encrypted_file.exists() || force)
+        {
             return Ok(entry_name.into_string());
         }
 
@@ -124,7 +127,7 @@ impl<'store, 'gpg> ImportEntries<'store, 'gpg> {
                     reason: error.message(),
                 }
             })?;
-            if imported_names.contains(entry_name.as_str()) {
+            if imported_names.contains(&entry_name.as_str().to_lowercase()) {
                 continue;
             }
             let encrypted_file = entry_name.encrypted_file_path(self.store.path());

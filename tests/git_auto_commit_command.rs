@@ -288,6 +288,31 @@ fn case_only_move_works_before_the_first_commit() {
 }
 
 #[test]
+fn nested_store_does_not_stage_files_in_parent_git_repository() {
+    let parent = git_store();
+    let before = commit_count(parent.path());
+    let store = parent.path().join("nested-store");
+
+    rpass_with_git_identity()
+        .args(["--store-dir", store.to_str().unwrap(), "init", "alice"])
+        .assert()
+        .success();
+
+    assert_eq!(
+        fs::read_to_string(store.join(".gpg-id")).unwrap(),
+        "alice\n"
+    );
+    assert_eq!(commit_count(parent.path()), before);
+    assert!(
+        git_output(
+            parent.path(),
+            ["ls-files", "--stage", "nested-store/.gpg-id"]
+        )
+        .is_empty()
+    );
+}
+
+#[test]
 fn write_commands_do_not_require_git_when_store_is_not_repository() {
     let store = tempfile::TempDir::new().expect("temp dir");
     write_file(store.path().join(".gpg-id"), "alice@example.invalid\n");

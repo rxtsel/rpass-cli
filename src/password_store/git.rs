@@ -335,8 +335,13 @@ impl GitCommand {
     }
 
     fn is_repository_optional(&self, store_root: &Path) -> Result<bool, PasswordStoreError> {
-        match self.raw_git(store_root, &["rev-parse", "--is-inside-work-tree"]) {
-            Ok(output) => Ok(output.status.success()),
+        match self.raw_git(store_root, &["rev-parse", "--show-toplevel"]) {
+            Ok(output) if output.status.success() => {
+                let top_level =
+                    path_from_git(output.stdout.strip_suffix(b"\n").unwrap_or(&output.stdout));
+                Ok(top_level.canonicalize()? == store_root.canonicalize()?)
+            }
+            Ok(_) => Ok(false),
             Err(PasswordStoreError::GitNotFound) if !store_root.join(".git").exists() => Ok(false),
             Err(error) => Err(error),
         }

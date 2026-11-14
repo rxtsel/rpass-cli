@@ -93,10 +93,20 @@ printf 'gpg-passphrase\n' | rpass otp example/login --json --passphrase-stdin
 
 ## Shell Completions
 
-```bash
+```sh
+# Bash
 rpass completions bash >> ~/.bashrc
+
+# Zsh
 rpass completions zsh > "${fpath[1]}/_rpass"
+# Initialize completions now; also add these two lines to ~/.zshrc if your Zsh framework does not already run compinit.
+autoload -Uz compinit
+compinit
+
+# Fish
 rpass completions fish > ~/.config/fish/completions/rpass.fish
+
+# PowerShell
 rpass completions powershell >> $PROFILE
 ```
 
@@ -113,7 +123,7 @@ rpass completions powershell >> $PROFILE
 **Known differences from `pass`:**
 - `generate`, `insert`, `edit`, `rm`, and `mv` for writes
 - Git commands are explicit (`rpass git <args>`); writes auto-commit only when the store is a Git repository. `rpass git init` accepts only branch and quiet options, so it cannot initialize a different directory or a bare repository
-- Changing recipients with `init` does not re-encrypt existing entries. Removing a subfolder's last recipient deletes its `.gpg-id`, so new entries inherit the parent folder's recipients; existing entries are not re-encrypted
+- Changing recipients with `init` or `recipients` re-encrypts affected entries when recipients remain. Removing a subfolder's last recipient deletes its `.gpg-id`, so new entries inherit the parent folder's recipients; existing entries are not re-encrypted in that case
 - Moving entries between folders with different recipients is refused; re-encrypt them for the new recipients first
 - Clipboard and QR codes are not implemented
 - Unsupported `pass` flags are rejected instead of ignored

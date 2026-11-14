@@ -433,10 +433,11 @@ fn auto_commit_never_stages_plaintext_or_commits_unrelated_staged_files() {
 #[test]
 fn auto_commit_does_not_include_unrelated_encrypted_changes() {
     let store = git_store();
-    write_file(store.path().join("other.gpg"), "original");
-    git(store.path(), ["add", "other.gpg"]);
-    git(store.path(), ["commit", "-m", "seed other"]);
-    write_file(store.path().join("other.gpg"), "changed");
+    write_file(store.path().join("team/.gpg-id"), "team@example.invalid\n");
+    write_file(store.path().join("team/other.gpg"), "original");
+    git(store.path(), ["add", "team"]);
+    git(store.path(), ["commit", "-m", "seed team"]);
+    write_file(store.path().join("team/other.gpg"), "changed");
 
     rpass_with_git_identity()
         .args([
@@ -450,8 +451,8 @@ fn auto_commit_does_not_include_unrelated_encrypted_changes() {
 
     let files = git_output(store.path(), ["show", "--pretty=", "--name-only", "HEAD"]);
     assert!(files.contains(".gpg-id"));
-    assert!(!files.contains("other.gpg"));
-    assert!(git_output(store.path(), ["status", "--porcelain"]).contains("other.gpg"));
+    assert!(!files.contains("team/other.gpg"));
+    assert!(git_output(store.path(), ["status", "--porcelain"]).contains("team/other.gpg"));
 }
 
 #[test]

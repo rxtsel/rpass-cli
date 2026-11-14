@@ -18,7 +18,8 @@ use crate::password_store::importer::bitwarden::BitwardenImporter;
 use crate::password_store::{
     DecryptedEntry, DoctorReport, EditEntry, GitCommand, GpgCommand, ImportEntries, ImportResult,
     InitStore, InitStoreResult, InsertEntry, ListEntries, MoveEntry, OtpCode, PasswordStore,
-    Recipients, RecipientsResult, RemoveEntry, SearchEntries, ShowEntry, StoreDirectory,
+    ReEncryptEntries, Recipients, RecipientsResult, RemoveEntry, SearchEntries, ShowEntry,
+    StoreDirectory,
 };
 use tree_output::EntryTree;
 
@@ -496,6 +497,15 @@ fn init_store(command: InitCommand, store_directory: StoreDirectory) -> Result<(
     let result = InitStore::new(store_directory.clone())
         .execute(command.path.as_deref(), &command.gpg_ids)?;
     let store = PasswordStore::open(store_directory)?;
+    let mut changed = vec![result.gpg_id_path.clone()];
+    if !result.removed && !result.recipients.is_empty() {
+        let gpg = GpgCommand::from_environment();
+        changed.extend(ReEncryptEntries::new(&store, gpg).execute(
+            command.path.as_deref(),
+            &result.recipients,
+            None,
+        )?);
+    }
     if command.json {
         print_json_init(&result)?;
     } else if result.removed {
@@ -504,11 +514,7 @@ fn init_store(command: InitCommand, store_directory: StoreDirectory) -> Result<(
         print_init_success(&command);
     }
 
-    auto_commit(
-        &store,
-        &init_commit_message(&command, &result),
-        std::slice::from_ref(&result.gpg_id_path),
-    )?;
+    auto_commit(&store, &init_commit_message(&command, &result), &changed)?;
     Ok(())
 }
 
@@ -576,14 +582,27 @@ fn recipients(command: RecipientsCommand, store_directory: StoreDirectory) -> Re
 
     let store = PasswordStore::open(store_directory)?;
     let recipients = Recipients::new(&store);
-    let result = match &command.action {
+    let (result, reencrypted) = match &command.action {
         Some(RecipientsAction::Add { key_id }) => {
-            recipients.add(command.path.as_deref(), key_id)?
+            let result = recipients.add(command.path.as_deref(), key_id)?;
+            let reencrypted = if result.changed {
+                ReEncryptEntries::new(&store, GpgCommand::from_environment()).execute(
+                    command.path.as_deref(),
+                    &result.recipients,
+                    None,
+                )?
+            } else {
+                Vec::new()
+            };
+            (result, reencrypted)
         }
         Some(RecipientsAction::Remove { key_id }) => {
-            recipients.remove(command.path.as_deref(), key_id)?
+            let result = recipients.remove(command.path.as_deref(), key_id)?;
+            let reencrypted = ReEncryptEntries::new(&store, GpgCommand::from_environment())
+                .execute(command.path.as_deref(), &result.recipients, None)?;
+            (result, reencrypted)
         }
-        None => recipients.list(command.path.as_deref())?,
+        None => (recipients.list(command.path.as_deref())?, Vec::new()),
     };
 
     if command.json {
@@ -592,17 +611,15 @@ fn recipients(command: RecipientsCommand, store_directory: StoreDirectory) -> Re
         print_text_recipients(&command, &result);
     }
 
+    let mut changed = vec![result.gpg_id_path.clone()];
+    changed.extend(reencrypted);
     match &command.action {
-        Some(RecipientsAction::Add { key_id }) if result.changed => auto_commit(
-            &store,
-            &format!("Added GPG id {key_id}."),
-            std::slice::from_ref(&result.gpg_id_path),
-        )?,
-        Some(RecipientsAction::Remove { key_id }) => auto_commit(
-            &store,
-            &format!("Removed GPG id {key_id}."),
-            std::slice::from_ref(&result.gpg_id_path),
-        )?,
+        Some(RecipientsAction::Add { key_id }) if result.changed => {
+            auto_commit(&store, &format!("Added GPG id {key_id}."), &changed)?;
+        }
+        Some(RecipientsAction::Remove { key_id }) => {
+            auto_commit(&store, &format!("Removed GPG id {key_id}."), &changed)?;
+        }
         _ => {}
     }
     Ok(())

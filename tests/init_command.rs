@@ -6,7 +6,7 @@ use std::path::Path;
 use predicates::prelude::*;
 use serde_json::Value;
 
-use support::rpass;
+use support::{reencrypting_gpg_script, rpass};
 
 #[test]
 fn init_creates_missing_store_and_writes_gpg_id() {
@@ -254,6 +254,254 @@ fn init_auto_commits_when_store_is_git_repository() {
     assert_eq!(
         git_output(store.path(), ["log", "-1", "--pretty=%s"]).trim_end_matches(['\r', '\n']),
         "Set GPG id to alice@example.invalid."
+    );
+}
+
+#[test]
+fn init_re_encrypts_existing_entries_with_new_recipients() {
+    let store = tempfile::TempDir::new().expect("temp dir");
+    write_file(store.path().join(".gpg-id"), "old@example.invalid\n");
+    write_file(store.path().join("entry.gpg"), "secret\n");
+    write_file(store.path().join("subdir/nested.gpg"), "nested-secret\n");
+
+    let (gpg, log_file) = reencrypting_gpg_script(store.path());
+
+    rpass()
+        .env("PASSWORD_STORE_GPG", &gpg)
+        .args([
+            "--store-dir",
+            store.path().to_str().expect("store path"),
+            "init",
+            "new@example.invalid",
+        ])
+        .assert()
+        .success()
+        .stdout("Password store initialized for new@example.invalid\n")
+        .stderr("");
+
+    let log = fs::read_to_string(&log_file).expect("log file");
+    assert!(
+        log.contains("recipient:new@example.invalid"),
+        "expected new recipient in log, got: {log}"
+    );
+    let encrypt_count = log.lines().filter(|l| *l == "encrypt").count();
+    assert_eq!(
+        encrypt_count, 2,
+        "expected 2 entries re-encrypted, got: {encrypt_count}"
+    );
+
+    assert_eq!(
+        fs::read_to_string(store.path().join("entry.gpg")).expect("entry"),
+        "secret\n",
+        "content should be preserved after re-encryption"
+    );
+    assert_eq!(
+        fs::read_to_string(store.path().join("subdir/nested.gpg")).expect("nested entry"),
+        "nested-secret\n",
+        "nested content should be preserved after re-encryption"
+    );
+}
+
+#[test]
+fn init_commits_reencrypted_entries_with_recipient_changes() {
+    let store = tempfile::TempDir::new().unwrap();
+    write_file(store.path().join(".gpg-id"), "old@example.invalid\n");
+    write_file(store.path().join("entry.gpg"), "old ciphertext\n");
+    git(store.path(), ["init"]);
+    git(store.path(), ["config", "user.name", "rpass tests"]);
+    git(
+        store.path(),
+        ["config", "user.email", "rpass-tests@example.invalid"],
+    );
+    git(store.path(), ["add", ".gpg-id", "entry.gpg"]);
+    git(store.path(), ["commit", "-m", "initial store"]);
+    write_file(store.path().join("entry.gpg"), "new ciphertext\n");
+    let (gpg, _) = reencrypting_gpg_script(store.path());
+
+    rpass()
+        .env("PASSWORD_STORE_GPG", gpg)
+        .env("GIT_AUTHOR_NAME", "rpass tests")
+        .env("GIT_AUTHOR_EMAIL", "rpass-tests@example.invalid")
+        .env("GIT_COMMITTER_NAME", "rpass tests")
+        .env("GIT_COMMITTER_EMAIL", "rpass-tests@example.invalid")
+        .args([
+            "--store-dir",
+            store.path().to_str().unwrap(),
+            "init",
+            "new@example.invalid",
+        ])
+        .assert()
+        .success();
+
+    let committed = git_output(store.path(), ["show", "--pretty=", "--name-only", "HEAD"]);
+    assert!(committed.lines().any(|path| path == ".gpg-id"));
+    assert!(committed.lines().any(|path| path == "entry.gpg"));
+}
+
+#[test]
+fn init_skips_git_and_recovery_directories_when_reencrypting() {
+    let store = tempfile::TempDir::new().unwrap();
+    write_file(store.path().join(".gpg-id"), "old@example.invalid\n");
+    write_file(store.path().join("entry.gpg"), "secret\n");
+    git(store.path(), ["init"]);
+    git(store.path(), ["config", "user.name", "rpass tests"]);
+    git(
+        store.path(),
+        ["config", "user.email", "rpass-tests@example.invalid"],
+    );
+    write_file(store.path().join(".git/ignored.gpg"), "metadata\n");
+    write_file(
+        store.path().join(".rpass-backup-old/ignored.gpg"),
+        "backup\n",
+    );
+    let (gpg, log_file) = reencrypting_gpg_script(store.path());
+
+    rpass()
+        .env("PASSWORD_STORE_GPG", gpg)
+        .args([
+            "--store-dir",
+            store.path().to_str().unwrap(),
+            "init",
+            "new@example.invalid",
+        ])
+        .assert()
+        .success();
+
+    assert_eq!(
+        fs::read_to_string(store.path().join(".git/ignored.gpg")).unwrap(),
+        "metadata\n"
+    );
+    assert_eq!(
+        fs::read_to_string(store.path().join(".rpass-backup-old/ignored.gpg")).unwrap(),
+        "backup\n"
+    );
+    assert_eq!(
+        fs::read_to_string(log_file)
+            .unwrap()
+            .lines()
+            .filter(|line| *line == "encrypt")
+            .count(),
+        1
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn init_does_not_reencrypt_entries_through_symlinks() {
+    let store = tempfile::TempDir::new().unwrap();
+    let outside = tempfile::TempDir::new().unwrap();
+    write_file(store.path().join(".gpg-id"), "old@example.invalid\n");
+    write_file(outside.path().join("entry.gpg"), "outside ciphertext\n");
+    std::os::unix::fs::symlink(outside.path(), store.path().join("linked")).unwrap();
+    let (gpg, log_file) = reencrypting_gpg_script(store.path());
+
+    rpass()
+        .env("PASSWORD_STORE_GPG", gpg)
+        .args([
+            "--store-dir",
+            store.path().to_str().unwrap(),
+            "init",
+            "new@example.invalid",
+        ])
+        .assert()
+        .success();
+
+    assert_eq!(
+        fs::read_to_string(outside.path().join("entry.gpg")).unwrap(),
+        "outside ciphertext\n"
+    );
+    assert!(fs::read_to_string(log_file).unwrap_or_default().is_empty());
+}
+
+#[test]
+fn init_skips_entries_in_subdirectory_with_own_gpg_id() {
+    let store = tempfile::TempDir::new().expect("temp dir");
+    write_file(store.path().join(".gpg-id"), "old@example.invalid\n");
+    write_file(store.path().join("team/.gpg-id"), "team@example.invalid\n");
+    write_file(store.path().join("entry.gpg"), "root-secret\n");
+    write_file(store.path().join("team/entry.gpg"), "team-secret\n");
+
+    let (gpg, log_file) = reencrypting_gpg_script(store.path());
+
+    rpass()
+        .env("PASSWORD_STORE_GPG", &gpg)
+        .args([
+            "--store-dir",
+            store.path().to_str().expect("store path"),
+            "init",
+            "new@example.invalid",
+        ])
+        .assert()
+        .success();
+
+    let log = fs::read_to_string(&log_file).expect("log file");
+    let encrypt_count = log.lines().filter(|l| *l == "encrypt").count();
+    assert_eq!(
+        encrypt_count, 1,
+        "only the root entry should be re-encrypted, not the team entry with its own .gpg-id; log: {log}"
+    );
+}
+
+#[test]
+fn init_re_encrypts_only_entries_in_target_subfolder() {
+    let store = tempfile::TempDir::new().expect("temp dir");
+    write_file(store.path().join(".gpg-id"), "root@example.invalid\n");
+    write_file(
+        store.path().join("team/.gpg-id"),
+        "old-team@example.invalid\n",
+    );
+    write_file(store.path().join("root-entry.gpg"), "root-secret\n");
+    write_file(store.path().join("team/entry.gpg"), "team-secret\n");
+
+    let (gpg, log_file) = reencrypting_gpg_script(store.path());
+
+    rpass()
+        .env("PASSWORD_STORE_GPG", &gpg)
+        .args([
+            "--store-dir",
+            store.path().to_str().expect("store path"),
+            "init",
+            "--path",
+            "team",
+            "new-team@example.invalid",
+        ])
+        .assert()
+        .success();
+
+    let log = fs::read_to_string(&log_file).expect("log file");
+    let encrypt_count = log.lines().filter(|l| *l == "encrypt").count();
+    assert_eq!(
+        encrypt_count, 1,
+        "only team/entry.gpg should be re-encrypted; log: {log}"
+    );
+    assert!(
+        log.contains("recipient:new-team@example.invalid"),
+        "new team recipient should be used; log: {log}"
+    );
+}
+
+#[test]
+fn init_skips_re_encryption_when_store_has_no_entries() {
+    let store = tempfile::TempDir::new().expect("temp dir");
+
+    let (gpg, log_file) = reencrypting_gpg_script(store.path());
+
+    rpass()
+        .env("PASSWORD_STORE_GPG", &gpg)
+        .args([
+            "--store-dir",
+            store.path().to_str().expect("store path"),
+            "init",
+            "alice@example.invalid",
+        ])
+        .assert()
+        .success()
+        .stdout("Password store initialized for alice@example.invalid\n");
+
+    let log = fs::read_to_string(&log_file).unwrap_or_default();
+    assert!(
+        log.is_empty(),
+        "no re-encryption should happen with empty store; log: {log}"
     );
 }
 

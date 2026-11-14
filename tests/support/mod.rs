@@ -497,6 +497,117 @@ pub fn failing_gpg_script(directory: &Path, message: &str) -> PathBuf {
     script
 }
 
+#[cfg(windows)]
+#[allow(dead_code)]
+pub fn reencrypting_gpg_script(directory: &Path) -> (PathBuf, PathBuf) {
+    let script = directory.join("gpg-reencrypt.cmd");
+    let log_file = directory.join("gpg-reencrypt-log.txt");
+
+    fs::write(
+        &script,
+        format!(
+            r#"@echo off
+setlocal enabledelayedexpansion
+set log_file={log}
+set mode=encrypt
+set output=
+set input_file=
+:args
+if "%~1"=="" goto run
+if "%~1"=="--decrypt" (
+  set mode=decrypt
+  shift
+  goto args
+)
+if "%~1"=="--recipient" (
+  echo recipient:%~2>> "%log_file%"
+  shift
+  shift
+  goto args
+)
+if "%~1"=="--output" (
+  set output=%~2
+  shift
+  shift
+  goto args
+)
+set arg=%~1
+if "!arg:~0,1!"=="-" (
+  shift
+  goto args
+)
+set input_file=%~1
+shift
+goto args
+:run
+if "%mode%"=="decrypt" (
+  type "%input_file%"
+  exit /b 0
+)
+echo encrypt>> "%log_file%"
+findstr /r ".*" > "%output%"
+exit /b 0
+"#,
+            log = log_file.display()
+        ),
+    )
+    .expect("script");
+    (script, log_file)
+}
+
+#[cfg(not(windows))]
+#[allow(dead_code)]
+pub fn reencrypting_gpg_script(directory: &Path) -> (PathBuf, PathBuf) {
+    let script = directory.join("gpg-reencrypt");
+    let log_file = directory.join("gpg-reencrypt-log.txt");
+
+    fs::write(
+        &script,
+        format!(
+            r#"#!/bin/sh
+set -eu
+log_file='{log}'
+mode='encrypt'
+output=''
+input_file=''
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --decrypt)
+      mode='decrypt'
+      shift
+      ;;
+    --recipient)
+      printf 'recipient:%s\n' "$2" >> "$log_file"
+      shift 2
+      ;;
+    --output)
+      output="$2"
+      shift 2
+      ;;
+    -*)
+      shift
+      ;;
+    *)
+      input_file="$1"
+      shift
+      ;;
+  esac
+done
+if [ "$mode" = "decrypt" ]; then
+  cat "$input_file"
+  exit 0
+fi
+printf 'encrypt\n' >> "$log_file"
+cat > "$output"
+"#,
+            log = log_file.display()
+        ),
+    )
+    .expect("script");
+    make_executable(&script);
+    (script, log_file)
+}
+
 #[cfg(not(windows))]
 fn make_executable(path: &Path) {
     use std::os::unix::fs::PermissionsExt;

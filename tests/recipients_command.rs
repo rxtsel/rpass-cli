@@ -6,7 +6,7 @@ use std::path::Path;
 use predicates::prelude::*;
 use serde_json::Value;
 
-use support::rpass;
+use support::{reencrypting_gpg_script, rpass};
 
 #[test]
 fn lists_root_recipients() {
@@ -298,6 +298,149 @@ fn add_auto_commits_when_store_is_git_repository() {
     assert_eq!(
         git_output(store.path(), ["log", "-1", "--pretty=%s"]).trim_end_matches(['\r', '\n']),
         "Added GPG id bob@example.invalid."
+    );
+}
+
+#[test]
+fn add_commits_reencrypted_entries_with_recipient_changes() {
+    let store = tempfile::TempDir::new().unwrap();
+    write_file(store.path().join(".gpg-id"), "alice@example.invalid\n");
+    write_file(store.path().join("entry.gpg"), "old ciphertext\n");
+    git(store.path(), ["init"]);
+    git(store.path(), ["config", "user.name", "rpass tests"]);
+    git(
+        store.path(),
+        ["config", "user.email", "rpass-tests@example.invalid"],
+    );
+    git(store.path(), ["add", ".gpg-id", "entry.gpg"]);
+    git(store.path(), ["commit", "-m", "initial store"]);
+    write_file(store.path().join("entry.gpg"), "new ciphertext\n");
+    let (gpg, _) = reencrypting_gpg_script(store.path());
+
+    rpass()
+        .env("PASSWORD_STORE_GPG", gpg)
+        .env("GIT_AUTHOR_NAME", "rpass tests")
+        .env("GIT_AUTHOR_EMAIL", "rpass-tests@example.invalid")
+        .env("GIT_COMMITTER_NAME", "rpass tests")
+        .env("GIT_COMMITTER_EMAIL", "rpass-tests@example.invalid")
+        .args([
+            "--store-dir",
+            store.path().to_str().unwrap(),
+            "recipients",
+            "add",
+            "bob@example.invalid",
+        ])
+        .assert()
+        .success();
+
+    let committed = git_output(store.path(), ["show", "--pretty=", "--name-only", "HEAD"]);
+    assert!(committed.lines().any(|path| path == ".gpg-id"));
+    assert!(committed.lines().any(|path| path == "entry.gpg"));
+}
+
+#[test]
+fn add_re_encrypts_existing_entries_with_new_recipient() {
+    let store = tempfile::TempDir::new().expect("temp dir");
+    write_file(store.path().join(".gpg-id"), "alice@example.invalid\n");
+    write_file(store.path().join("entry.gpg"), "secret\n");
+
+    let (gpg, log_file) = reencrypting_gpg_script(store.path());
+
+    rpass()
+        .env("PASSWORD_STORE_GPG", &gpg)
+        .args([
+            "--store-dir",
+            store.path().to_str().expect("store path"),
+            "recipients",
+            "add",
+            "bob@example.invalid",
+        ])
+        .assert()
+        .success()
+        .stdout("Recipient 'bob@example.invalid' added\n")
+        .stderr("");
+
+    let log = fs::read_to_string(&log_file).expect("log file");
+    assert!(
+        log.contains("recipient:alice@example.invalid"),
+        "alice should still be a recipient; log: {log}"
+    );
+    assert!(
+        log.contains("recipient:bob@example.invalid"),
+        "bob should be a recipient after add; log: {log}"
+    );
+    let encrypt_count = log.lines().filter(|l| *l == "encrypt").count();
+    assert_eq!(
+        encrypt_count, 1,
+        "one entry should be re-encrypted; log: {log}"
+    );
+}
+
+#[test]
+fn remove_re_encrypts_existing_entries_without_removed_recipient() {
+    let store = tempfile::TempDir::new().expect("temp dir");
+    write_file(
+        store.path().join(".gpg-id"),
+        "alice@example.invalid\nbob@example.invalid\n",
+    );
+    write_file(store.path().join("entry.gpg"), "secret\n");
+
+    let (gpg, log_file) = reencrypting_gpg_script(store.path());
+
+    rpass()
+        .env("PASSWORD_STORE_GPG", &gpg)
+        .args([
+            "--store-dir",
+            store.path().to_str().expect("store path"),
+            "recipients",
+            "remove",
+            "bob@example.invalid",
+        ])
+        .assert()
+        .success()
+        .stdout("Recipient 'bob@example.invalid' removed\n")
+        .stderr("");
+
+    let log = fs::read_to_string(&log_file).expect("log file");
+    assert!(
+        log.contains("recipient:alice@example.invalid"),
+        "alice should still be a recipient; log: {log}"
+    );
+    assert!(
+        !log.contains("recipient:bob@example.invalid"),
+        "bob should NOT be a recipient after remove; log: {log}"
+    );
+    let encrypt_count = log.lines().filter(|l| *l == "encrypt").count();
+    assert_eq!(
+        encrypt_count, 1,
+        "one entry should be re-encrypted; log: {log}"
+    );
+}
+
+#[test]
+fn add_skips_re_encryption_when_recipient_already_present() {
+    let store = tempfile::TempDir::new().expect("temp dir");
+    write_file(store.path().join(".gpg-id"), "alice@example.invalid\n");
+    write_file(store.path().join("entry.gpg"), "secret\n");
+
+    let (gpg, log_file) = reencrypting_gpg_script(store.path());
+
+    rpass()
+        .env("PASSWORD_STORE_GPG", &gpg)
+        .args([
+            "--store-dir",
+            store.path().to_str().expect("store path"),
+            "recipients",
+            "add",
+            "alice@example.invalid",
+        ])
+        .assert()
+        .success();
+
+    let log = fs::read_to_string(&log_file).unwrap_or_default();
+    assert!(
+        log.is_empty(),
+        "no re-encryption when recipient already present; log: {log}"
     );
 }
 

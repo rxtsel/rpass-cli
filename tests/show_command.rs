@@ -77,6 +77,26 @@ fn shows_existing_entry_with_line_break_in_name() {
 }
 
 #[test]
+fn does_not_forward_piped_input_without_passphrase_stdin() {
+    let store = password_store_with_entry("example/login.gpg");
+    let gpg = passphrase_gpg_script(store.path(), "", "secret\n");
+
+    rpass()
+        .env("PASSWORD_STORE_GPG", gpg)
+        .write_stdin("third-party input\n")
+        .args([
+            "--store-dir",
+            store.path().to_str().expect("store path"),
+            "show",
+            "example/login",
+        ])
+        .assert()
+        .success()
+        .stdout("secret\n")
+        .stderr("");
+}
+
+#[test]
 fn shows_entry_without_explicit_show_subcommand() {
     let store = password_store_with_entry("example/login.gpg");
     let gpg = successful_gpg_script(store.path(), "dummy-password\nusername: demo\n");

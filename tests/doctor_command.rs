@@ -48,6 +48,27 @@ fn reports_ready_environment_as_json() {
 }
 
 #[test]
+fn rejects_empty_or_comment_only_recipient_file() {
+    let store = TempDir::new().unwrap();
+    let gpg = successful_gpg_script(store.path(), "gpg (GnuPG) test\n");
+    for contents in ["\n", "# no recipients\n"] {
+        fs::write(store.path().join(".gpg-id"), contents).unwrap();
+        rpass()
+            .env("PASSWORD_STORE_GPG", &gpg)
+            .args([
+                "--store-dir",
+                store.path().to_str().unwrap(),
+                "doctor",
+                "--json",
+            ])
+            .assert()
+            .failure()
+            .stdout(predicate::str::contains("\"ok\": false"))
+            .stdout(predicate::str::contains("\"name\": \"gpg_id\""));
+    }
+}
+
+#[test]
 fn exits_with_failure_when_gpg_id_is_missing() {
     let store = TempDir::new().expect("temp dir");
     let gpg = successful_gpg_script(store.path(), "gpg (GnuPG) test\n");

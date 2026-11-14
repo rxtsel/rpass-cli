@@ -78,10 +78,11 @@ fn store_directory_check(store_path: &Path) -> DoctorCheck {
 fn gpg_id_check(store_path: &Path) -> DoctorCheck {
     let gpg_id = store_path.join(".gpg-id");
 
-    if gpg_id.is_file() {
-        DoctorCheck::ok("gpg_id", format!(".gpg-id found: {}", gpg_id.display()))
-    } else {
-        DoctorCheck::fail("gpg_id", format!(".gpg-id not found: {}", gpg_id.display()))
+    match super::store_directory::check_store_path(store_path, &gpg_id)
+        .and_then(|_| super::recipients::read_recipients(&gpg_id))
+    {
+        Ok(_) => DoctorCheck::ok("gpg_id", format!(".gpg-id found: {}", gpg_id.display())),
+        Err(error) => DoctorCheck::fail("gpg_id", format!("{}: {error}", gpg_id.display())),
     }
 }
 

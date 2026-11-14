@@ -178,6 +178,38 @@ fn removes_recipient() {
 }
 
 #[test]
+fn removing_last_recipient_removes_gpg_id_instead_of_leaving_empty_file() {
+    let store = tempfile::TempDir::new().unwrap();
+    write_file(store.path().join(".gpg-id"), "alice\n");
+    git(store.path(), ["init"]);
+    git(store.path(), ["config", "user.name", "rpass tests"]);
+    git(
+        store.path(),
+        ["config", "user.email", "rpass-tests@example.invalid"],
+    );
+    git(store.path(), ["add", ".gpg-id"]);
+    git(store.path(), ["commit", "-m", "initial store"]);
+    rpass()
+        .env("GIT_AUTHOR_NAME", "rpass tests")
+        .env("GIT_AUTHOR_EMAIL", "rpass-tests@example.invalid")
+        .env("GIT_COMMITTER_NAME", "rpass tests")
+        .env("GIT_COMMITTER_EMAIL", "rpass-tests@example.invalid")
+        .args([
+            "--store-dir",
+            store.path().to_str().unwrap(),
+            "recipients",
+            "--json",
+            "remove",
+            "alice",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("\"recipients\": []"));
+    assert!(!store.path().join(".gpg-id").exists());
+    assert!(git_output(store.path(), ["ls-tree", "-r", "--name-only", "HEAD"]).is_empty());
+}
+
+#[test]
 fn remove_missing_recipient_returns_json_error() {
     let store = tempfile::TempDir::new().expect("temp dir");
     write_file(store.path().join(".gpg-id"), "alice@example.invalid\n");

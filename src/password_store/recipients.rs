@@ -69,7 +69,11 @@ impl<'store> Recipients<'store> {
             return Err(PasswordStoreError::RecipientNotFound(recipient.to_owned()));
         }
 
-        write_recipients(&gpg_id_path, &recipients)?;
+        if recipients.is_empty() {
+            fs::remove_file(&gpg_id_path)?;
+        } else {
+            write_recipients(&gpg_id_path, &recipients)?;
+        }
 
         Ok(RecipientsResult {
             gpg_id_path: relative_path(self.store.path(), &gpg_id_path),
@@ -97,7 +101,7 @@ fn gpg_id_path(store_root: &Path, subfolder: Option<&str>) -> PathBuf {
     }
 }
 
-fn read_recipients(path: &Path) -> Result<Vec<String>, PasswordStoreError> {
+pub(super) fn read_recipients(path: &Path) -> Result<Vec<String>, PasswordStoreError> {
     if !path.exists() {
         return Err(PasswordStoreError::GpgIdNotFound);
     }

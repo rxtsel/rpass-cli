@@ -113,6 +113,11 @@ impl GpgCommand {
             if let Some(error) = stdin_error {
                 return Err(PasswordStoreError::Io(error));
             }
+            if std::fs::metadata(&staged_output)?.len() == 0 {
+                return Err(PasswordStoreError::GpgEncryptFailed(
+                    "gpg produced empty ciphertext".to_owned(),
+                ));
+            }
 
             staged_output
                 .persist(output_file)
@@ -143,7 +148,13 @@ impl GpgCommand {
 
         let stdout =
             String::from_utf8(output.stdout).map_err(PasswordStoreError::GpgOutputNotUtf8)?;
-        Ok(first_line(&stdout).to_owned())
+        let version = first_line(&stdout);
+        if version.trim().is_empty() {
+            return Err(PasswordStoreError::GpgVersionFailed(
+                "gpg returned an empty version".to_owned(),
+            ));
+        }
+        Ok(version.to_owned())
     }
 }
 

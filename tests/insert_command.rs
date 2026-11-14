@@ -4,7 +4,9 @@ use std::fs;
 
 use predicates::prelude::*;
 
-use support::{encrypting_gpg_script, failing_encrypting_gpg_script, rpass};
+use support::{
+    empty_success_gpg_script, encrypting_gpg_script, failing_encrypting_gpg_script, rpass,
+};
 
 #[test]
 fn inserts_multiline_entry_by_encrypting_stdin_with_store_recipients() {
@@ -161,6 +163,34 @@ fn failed_force_overwrite_preserves_existing_entry() {
 
     let encrypted = fs::read_to_string(store.path().join("email/work.gpg")).expect("entry");
     assert_eq!(encrypted, "original encrypted\n");
+}
+
+#[test]
+fn successful_gpg_without_ciphertext_does_not_overwrite_entry() {
+    let store = tempfile::TempDir::new().unwrap();
+    fs::write(store.path().join(".gpg-id"), "alice\n").unwrap();
+    fs::write(store.path().join("entry.gpg"), "original ciphertext").unwrap();
+
+    rpass()
+        .env("PASSWORD_STORE_GPG", empty_success_gpg_script(store.path()))
+        .write_stdin("new password\n")
+        .args([
+            "--store-dir",
+            store.path().to_str().unwrap(),
+            "insert",
+            "--force",
+            "entry",
+            "--json",
+        ])
+        .assert()
+        .failure()
+        .stdout("")
+        .stderr(predicate::str::contains("\"code\": \"gpg_encrypt_failed\""));
+
+    assert_eq!(
+        fs::read(store.path().join("entry.gpg")).unwrap(),
+        b"original ciphertext"
+    );
 }
 
 #[test]

@@ -133,15 +133,7 @@ mod tests {
         );
     }
 
-    fn fake_gpg() -> std::path::PathBuf {
-        // Use a program where --version exits 0 everywhere:
-        // - GNU coreutils true: prints version to stdout, exits 0
-        // - macOS/BSD true: exits 0 silently
-        // - cargo: available during tests on all platforms
-        if cfg!(windows) {
-            PathBuf::from("cargo")
-        } else {
-            PathBuf::from("true")
-        }
+    fn fake_gpg() -> PathBuf {
+        PathBuf::from("cargo")
     }
 }

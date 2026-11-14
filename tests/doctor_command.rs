@@ -5,7 +5,7 @@ use tempfile::TempDir;
 
 mod support;
 
-use support::{rpass, successful_gpg_script};
+use support::{empty_success_gpg_script, rpass, successful_gpg_script};
 
 #[test]
 fn reports_ready_environment_as_text() {
@@ -66,6 +66,24 @@ fn rejects_empty_or_comment_only_recipient_file() {
             .stdout(predicate::str::contains("\"ok\": false"))
             .stdout(predicate::str::contains("\"name\": \"gpg_id\""));
     }
+}
+
+#[test]
+fn rejects_gpg_command_with_empty_version_output() {
+    let store = password_store_with_gpg_id();
+    rpass()
+        .env("PASSWORD_STORE_GPG", empty_success_gpg_script(store.path()))
+        .args([
+            "--store-dir",
+            store.path().to_str().unwrap(),
+            "doctor",
+            "--json",
+        ])
+        .assert()
+        .failure()
+        .stdout(predicate::str::contains("\"ok\": false"))
+        .stdout(predicate::str::contains("\"name\": \"gpg\""))
+        .stderr(predicate::str::contains("doctor_checks_failed"));
 }
 
 #[test]

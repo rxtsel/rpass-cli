@@ -29,7 +29,7 @@ fn collect_entries(
         let item = item?;
         let path = item.path();
 
-        if should_skip_directory(&path) {
+        if should_skip_directory(&path) || item.file_type()?.is_symlink() {
             continue;
         }
 
@@ -47,7 +47,8 @@ fn collect_entries(
 }
 
 fn should_skip_directory(path: &Path) -> bool {
-    path.file_name().is_some_and(|name| name == ".git")
+    path.file_name()
+        .is_some_and(|name| name == ".git" || name.to_string_lossy().starts_with(".rpass-backup-"))
 }
 
 fn entry_name_from_path(
@@ -100,6 +101,25 @@ mod tests {
         let entries = ListEntries::new(&store).execute().expect("entries");
 
         assert_eq!(entries, vec!["a"]);
+    }
+
+    #[test]
+    fn ignores_abandoned_move_backups_at_any_depth() {
+        let temp_dir = TempDir::new().expect("temp dir");
+        create_file(temp_dir.path().join("live.gpg"));
+        create_file(temp_dir.path().join(".rpass-backup-root/previous/old.gpg"));
+        create_file(
+            temp_dir
+                .path()
+                .join("team/.rpass-backup-nested/previous/old.gpg"),
+        );
+        create_file(temp_dir.path().join("team/current.gpg"));
+
+        let store = PasswordStore::open(StoreDirectory::from_path(temp_dir.path())).expect("store");
+        assert_eq!(
+            ListEntries::new(&store).execute().expect("entries"),
+            vec!["live", "team/current"]
+        );
     }
 
     fn create_file(path: impl AsRef<std::path::Path>) {

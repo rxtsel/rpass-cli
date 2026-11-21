@@ -1,6 +1,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use super::insert_entry::recipients_for_entry;
 use super::{EntryName, PasswordStore, PasswordStoreError};
 use crate::password_store::remove_entry::prune_empty_parent_directories;
 
@@ -23,22 +24,82 @@ impl<'store> MoveEntry<'store> {
         let new_entry_name = parse_entry_name(new_entry_name)?;
         let source = move_source(self.store.path(), &old_entry_name)?;
         let destination = destination_for_source(self.store.path(), &new_entry_name, &source);
+        self.store.check_path(source.path())?;
+        self.store.check_path(&destination)?;
+        if source.path() == destination
+            || matches!(source, MoveSource::Directory(_))
+                && (source.path().starts_with(&destination)
+                    || destination.starts_with(source.path()))
+        {
+            return Err(PasswordStoreError::InvalidMove);
+        }
+        let destination_recipients = if source.path().is_dir() {
+            destination
+                .parent()
+                .expect("validated entry path")
+                .join("entry.gpg")
+        } else {
+            destination.clone()
+        };
+        ensure_recipients_unchanged(
+            self.store.path(),
+            source.path(),
+            &destination,
+            &destination_recipients,
+            false,
+        )?;
 
+        let same_file =
+            destination.exists() && source.path().canonicalize()? == destination.canonicalize()?;
+        if same_file && source.path().parent() != destination.parent() {
+            return Err(PasswordStoreError::InvalidMove);
+        }
         if destination.exists() {
-            if !force {
+            if !force && !same_file {
                 return Err(PasswordStoreError::EntryAlreadyExists(
                     new_entry_name.as_str().to_owned(),
                 ));
             }
-
-            remove_destination(&destination)?;
+            if source.path().is_dir() != destination.is_dir() {
+                return Err(PasswordStoreError::InvalidMove);
+            }
         }
 
-        if let Some(parent) = destination.parent() {
-            fs::create_dir_all(parent)?;
+        let parent = destination.parent().expect("validated entry path");
+        fs::create_dir_all(parent)?;
+        if destination.exists() {
+            let backup = tempfile::Builder::new()
+                .prefix(".rpass-backup-")
+                .tempdir_in(parent)?;
+            let previous = backup.path().join("previous");
+            fs::rename(&destination, &previous)?;
+            let moving = if same_file { &previous } else { source.path() };
+            if let Err(error) = fs::rename(moving, &destination) {
+                let restore_to = if same_file {
+                    source.path()
+                } else {
+                    &destination
+                };
+                if let Err(restore_error) = fs::rename(&previous, restore_to) {
+                    let saved = backup.keep();
+                    return Err(std::io::Error::other(format!(
+                        "move failed: {error}; restore failed: {restore_error}; old destination saved at {}",
+                        saved.display()
+                    ))
+                    .into());
+                }
+                return Err(error.into());
+            }
+            let backup_path = backup.path().to_path_buf();
+            backup.close().map_err(|error| {
+                std::io::Error::other(format!(
+                    "old destination could not be removed from {}: {error}",
+                    backup_path.display()
+                ))
+            })?;
+        } else {
+            fs::rename(source.path(), &destination)?;
         }
-
-        fs::rename(source.path(), &destination)?;
         prune_empty_parent_directories(self.store.path(), source.path().parent());
 
         Ok(())
@@ -82,13 +143,57 @@ fn destination_for_source(
     }
 }
 
-fn remove_destination(destination: &Path) -> Result<(), PasswordStoreError> {
-    if destination.is_dir() {
-        fs::remove_dir_all(destination)?;
+fn ensure_recipients_unchanged(
+    store_root: &Path,
+    source: &Path,
+    destination: &Path,
+    destination_recipients: &Path,
+    has_moved_id: bool,
+) -> Result<(), PasswordStoreError> {
+    if source.is_dir() {
+        let gpg_id = source.join(".gpg-id");
+        super::store_directory::check_store_path(store_root, &gpg_id)?;
+        let has_moved_id = has_moved_id || gpg_id.exists();
+        for item in fs::read_dir(source)? {
+            let item = item?;
+            let path = item.path();
+            super::store_directory::check_store_path(store_root, &path)?;
+            if path.is_dir() {
+                ensure_recipients_unchanged(
+                    store_root,
+                    &path,
+                    &destination.join(path.strip_prefix(source).expect("child path")),
+                    destination_recipients,
+                    has_moved_id,
+                )?;
+            } else if !has_moved_id && path.extension().is_some_and(|ext| ext == "gpg") {
+                check_recipients(store_root, &path, destination_recipients)?;
+            }
+        }
     } else {
-        fs::remove_file(destination)?;
+        check_recipients(store_root, source, destination_recipients)?;
     }
+    Ok(())
+}
 
+fn check_recipients(
+    store_root: &Path,
+    source: &Path,
+    destination: &Path,
+) -> Result<(), PasswordStoreError> {
+    fn recipients(root: &Path, entry: &Path) -> Result<Option<Vec<String>>, PasswordStoreError> {
+        match recipients_for_entry(root, entry) {
+            Ok(mut recipients) => {
+                recipients.sort();
+                Ok(Some(recipients))
+            }
+            Err(PasswordStoreError::GpgIdNotFound) => Ok(None),
+            Err(error) => Err(error),
+        }
+    }
+    if recipients(store_root, source)? != recipients(store_root, destination)? {
+        return Err(PasswordStoreError::RecipientMismatch);
+    }
     Ok(())
 }
 

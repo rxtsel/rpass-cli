@@ -36,6 +36,63 @@ fn removes_entry_and_prunes_empty_parent_directories() {
 }
 
 #[test]
+fn git_failure_still_reports_removed_entry() {
+    let store = tempfile::TempDir::new().unwrap();
+    write_file(store.path().join("entry.gpg"), "ciphertext");
+    assert!(
+        std::process::Command::new("git")
+            .arg("-C")
+            .arg(store.path())
+            .arg("init")
+            .status()
+            .unwrap()
+            .success()
+    );
+    assert!(
+        std::process::Command::new("git")
+            .arg("-C")
+            .arg(store.path())
+            .args(["add", "entry.gpg"])
+            .status()
+            .unwrap()
+            .success()
+    );
+    assert!(
+        std::process::Command::new("git")
+            .arg("-C")
+            .arg(store.path())
+            .args([
+                "-c",
+                "user.name=test",
+                "-c",
+                "user.email=test@example.invalid",
+                "commit",
+                "-m",
+                "seed"
+            ])
+            .status()
+            .unwrap()
+            .success()
+    );
+    rpass()
+        .env("GIT_AUTHOR_NAME", "")
+        .env("GIT_COMMITTER_NAME", "")
+        .args([
+            "--store-dir",
+            store.path().to_str().unwrap(),
+            "rm",
+            "--force",
+            "entry",
+            "--json",
+        ])
+        .assert()
+        .failure()
+        .stdout(predicate::str::contains("\"name\": \"entry\""))
+        .stderr(predicate::str::contains("\"code\": \"git_failed\""));
+    assert!(!store.path().join("entry.gpg").exists());
+}
+
+#[test]
 fn keeps_parent_directory_when_it_contains_another_entry() {
     let store = tempfile::TempDir::new().expect("temp dir");
     write_file(store.path().join(".gpg-id"), "alice@example.invalid\n");
@@ -166,6 +223,27 @@ fn removes_entry_as_json_for_integrations() {
         .stderr("");
 
     assert!(!store.path().join("example/login.gpg").exists());
+}
+
+#[cfg(unix)]
+#[test]
+fn rejects_symlink_entry_outside_store() {
+    let store = tempfile::TempDir::new().expect("store");
+    let outside = tempfile::TempDir::new().expect("outside");
+    write_file(outside.path().join("secret.gpg"), "ciphertext");
+    std::os::unix::fs::symlink(outside.path(), store.path().join("link")).unwrap();
+    rpass()
+        .args([
+            "--store-dir",
+            store.path().to_str().unwrap(),
+            "rm",
+            "--force",
+            "link/secret",
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("outside the password store"));
+    assert!(outside.path().join("secret.gpg").exists());
 }
 
 fn write_file(path: impl AsRef<Path>, content: &str) {

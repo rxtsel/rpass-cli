@@ -21,13 +21,14 @@ impl<'store, 'gpg> ShowEntry<'store, 'gpg> {
         entry_name: &str,
         passphrase: Option<&str>,
     ) -> Result<ShowEntryOutput, PasswordStoreError> {
-        let entry_name = EntryName::from_user_input(entry_name).map_err(|error| {
+        let entry_name = EntryName::from_existing_input(entry_name).map_err(|error| {
             PasswordStoreError::InvalidEntryName {
                 entry: entry_name.to_owned(),
                 reason: error.message(),
             }
         })?;
         let encrypted_file = entry_name.encrypted_file_path(self.store.path());
+        self.store.check_read_path(&encrypted_file)?;
 
         if !encrypted_file.exists() {
             return Err(PasswordStoreError::EntryNotFound(entry_name.into_string()));

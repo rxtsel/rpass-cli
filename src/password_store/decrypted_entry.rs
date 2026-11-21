@@ -17,6 +17,11 @@ impl DecryptedEntry {
         let mut extra_lines = Vec::new();
 
         for line in lines {
+            // shortcut: this prefix is reserved for imported notes; revisit if existing stores use it literally.
+            if let Some(note) = line.strip_prefix("# rpass-note ") {
+                extra_lines.push(note.to_owned());
+                continue;
+            }
             if let Some(uri) = otp_uri_from_line(line) {
                 otp_uri = Some(uri.to_owned());
                 continue;
@@ -107,6 +112,26 @@ notes without separator
                 otp_uri: Some("otpauth://totp/example".to_string()),
                 extra_lines: vec!["notes without separator".to_string()],
             }
+        );
+    }
+
+    #[test]
+    fn imported_note_lines_do_not_override_otp_or_fields() {
+        let entry = DecryptedEntry::parse(
+            "password\notpauth://totp/real?secret=ABC\n# rpass-note See https://example.com\n# rpass-note username: another\n# rpass-note otpauth://totp/other?secret=DEF\n",
+        );
+        assert_eq!(
+            entry.otp_uri.as_deref(),
+            Some("otpauth://totp/real?secret=ABC")
+        );
+        assert!(entry.fields.is_empty());
+        assert_eq!(
+            entry.extra_lines,
+            [
+                "See https://example.com",
+                "username: another",
+                "otpauth://totp/other?secret=DEF"
+            ]
         );
     }
 

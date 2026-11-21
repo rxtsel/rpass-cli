@@ -33,5 +33,27 @@ jobs:
       - name: run clippy
         run: cargo clippy --all-targets -- -D warnings
 
+      - name: install GnuPG on macOS
+        if: runner.os == 'macOS'
+        run: brew install gnupg
+
+      - name: install native GnuPG on Windows
+        if: runner.os == 'Windows'
+        uses: msys2/setup-msys2@v2
+        id: msys2
+        with:
+          msystem: UCRT64
+          install: mingw-w64-ucrt-x86_64-gnupg
+
+      - name: add native GnuPG to Windows PATH
+        if: runner.os == 'Windows'
+        env:
+          MSYS2_LOCATION: ${{ steps.msys2.outputs.msys2-location }}
+        run: |
+          $bin = Join-Path $env:MSYS2_LOCATION 'ucrt64\bin'
+          & (Join-Path $bin 'gpg.exe') --version
+          if ($LASTEXITCODE -ne 0) { throw "Native GnuPG not found at $bin" }
+          $bin | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
       - name: run tests
         run: cargo test

@@ -1,6 +1,5 @@
 use std::env;
 use std::ffi::OsString;
-use std::fs;
 use std::io::{IsTerminal, Write};
 use std::path::Path;
 use std::process::{ChildStdin, Command, Output, Stdio};
@@ -118,8 +117,15 @@ impl GpgCommand {
             if let Some(error) = stdin_error {
                 return Err(PasswordStoreError::Io(error));
             }
+            if std::fs::metadata(&staged_output)?.len() == 0 {
+                return Err(PasswordStoreError::GpgEncryptFailed(
+                    "gpg produced empty ciphertext".to_owned(),
+                ));
+            }
 
-            replace_file(&staged_output, output_file)?;
+            staged_output
+                .persist(output_file)
+                .map_err(|error| PasswordStoreError::Io(error.error))?;
             return Ok(());
         }
 
@@ -146,7 +152,13 @@ impl GpgCommand {
 
         let stdout =
             String::from_utf8(output.stdout).map_err(PasswordStoreError::GpgOutputNotUtf8)?;
-        Ok(first_line(&stdout).to_owned())
+        let version = first_line(&stdout);
+        if !version.starts_with("gpg (GnuPG) 2.") {
+            return Err(PasswordStoreError::GpgVersionFailed(
+                "expected GnuPG 2.x".to_owned(),
+            ));
+        }
+        Ok(version.to_owned())
     }
 }
 
@@ -214,20 +226,6 @@ fn windows_gpg_install_paths() -> Vec<std::path::PathBuf> {
         std::path::PathBuf::from(r"C:\Program Files\Gpg4win\bin\gpg.exe"),
         std::path::PathBuf::from(r"C:\Program Files (x86)\Gpg4win\bin\gpg.exe"),
     ]
-}
-
-#[cfg(not(windows))]
-fn replace_file(source: &Path, destination: &Path) -> Result<(), PasswordStoreError> {
-    fs::rename(source, destination).map_err(PasswordStoreError::Io)
-}
-
-#[cfg(windows)]
-fn replace_file(source: &Path, destination: &Path) -> Result<(), PasswordStoreError> {
-    if destination.exists() {
-        fs::remove_file(destination)?;
-    }
-
-    fs::rename(source, destination).map_err(PasswordStoreError::Io)
 }
 
 fn map_gpg_spawn_error(error: std::io::Error) -> PasswordStoreError {

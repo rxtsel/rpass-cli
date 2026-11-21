@@ -20,6 +20,7 @@ impl<'store> RemoveEntry<'store> {
             }
         })?;
         let encrypted_file = entry_name.encrypted_file_path(self.store.path());
+        self.store.check_path(&encrypted_file)?;
 
         if !encrypted_file.exists() {
             return Err(PasswordStoreError::EntryNotFound(entry_name.into_string()));

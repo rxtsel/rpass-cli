@@ -5,6 +5,22 @@ pub struct EntryName(String);
 
 impl EntryName {
     pub fn from_user_input(input: &str) -> Result<Self, EntryNameError> {
+        let entry = Self::from_existing_input(input)?;
+        if input
+            .split('/')
+            .rev()
+            .skip(1)
+            .any(is_git_metadata_component)
+        {
+            return Err(EntryNameError::GitMetadata);
+        }
+        if input.chars().any(char::is_control) {
+            return Err(EntryNameError::ControlCharacter);
+        }
+        Ok(entry)
+    }
+
+    pub(super) fn from_existing_input(input: &str) -> Result<Self, EntryNameError> {
         if input.is_empty() {
             return Err(EntryNameError::Empty);
         }
@@ -29,7 +45,6 @@ impl EntryName {
         {
             return Err(EntryNameError::PathTraversal);
         }
-
         Ok(Self(input.to_owned()))
     }
 
@@ -78,6 +93,8 @@ pub enum EntryNameError {
     BackslashSeparator,
     GpgExtension,
     PathTraversal,
+    GitMetadata,
+    ControlCharacter,
 }
 
 impl EntryNameError {
@@ -88,8 +105,18 @@ impl EntryNameError {
             Self::BackslashSeparator => "entry name must use '/' as the path separator",
             Self::GpgExtension => "entry name must not include the .gpg extension",
             Self::PathTraversal => "entry name cannot contain '.' or '..' path segments",
+            Self::GitMetadata => "entry name cannot enter Git metadata",
+            Self::ControlCharacter => "entry name cannot contain control characters",
         }
     }
+}
+
+pub(super) fn is_git_metadata_component(segment: &str) -> bool {
+    segment == ".git"
+        || cfg!(windows)
+            && segment
+                .trim_end_matches([' ', '.'])
+                .eq_ignore_ascii_case(".git")
 }
 
 fn normalize_entry_path(path: &Path) -> String {
@@ -165,6 +192,23 @@ mod tests {
         let error = EntryName::from_user_input("../outside").unwrap_err();
 
         assert_eq!(error, super::EntryNameError::PathTraversal);
+    }
+
+    #[test]
+    fn rejects_hidden_git_paths_and_line_breaks() {
+        for name in [".git/hidden", "team/.git/hidden", "foo\nbar", "foo\rbar"] {
+            assert!(EntryName::from_user_input(name).is_err(), "{name:?}");
+        }
+        assert!(EntryName::from_user_input(".git").is_ok());
+        assert!(EntryName::from_existing_input("foo\nbar").is_ok());
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn rejects_windows_aliases_for_git_metadata() {
+        for name in [".GIT/hidden", ".git./hidden", ".git /hidden"] {
+            assert!(EntryName::from_user_input(name).is_err(), "{name:?}");
+        }
     }
 
     #[test]

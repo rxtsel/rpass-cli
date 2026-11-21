@@ -26,6 +26,7 @@ impl<'store, 'gpg> InsertEntry<'store, 'gpg> {
             }
         })?;
         let encrypted_file = entry_name.encrypted_file_path(self.store.path());
+        self.store.check_path(&encrypted_file)?;
 
         if encrypted_file.exists() && !force {
             return Err(PasswordStoreError::EntryAlreadyExists(
@@ -43,7 +44,7 @@ impl<'store, 'gpg> InsertEntry<'store, 'gpg> {
     }
 }
 
-pub(super) fn recipients_for_entry(
+pub(crate) fn recipients_for_entry(
     store_root: &Path,
     encrypted_file: &Path,
 ) -> Result<Vec<String>, PasswordStoreError> {
@@ -51,8 +52,9 @@ pub(super) fn recipients_for_entry(
 
     loop {
         let gpg_id = directory.join(".gpg-id");
+        super::store_directory::check_store_path(store_root, &gpg_id)?;
         if gpg_id.exists() {
-            return read_recipients(&gpg_id);
+            return super::recipients::read_recipients(&gpg_id);
         }
 
         if directory == store_root {
@@ -64,21 +66,6 @@ pub(super) fn recipients_for_entry(
             .map(PathBuf::from)
             .ok_or(PasswordStoreError::GpgIdNotFound)?;
     }
-}
-
-fn read_recipients(path: &Path) -> Result<Vec<String>, PasswordStoreError> {
-    let recipients = fs::read_to_string(path)?
-        .lines()
-        .map(str::trim)
-        .filter(|line| !line.is_empty() && !line.starts_with('#'))
-        .map(str::to_owned)
-        .collect::<Vec<_>>();
-
-    if recipients.is_empty() {
-        return Err(PasswordStoreError::GpgIdNotFound);
-    }
-
-    Ok(recipients)
 }
 
 #[cfg(test)]

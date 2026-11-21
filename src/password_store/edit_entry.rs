@@ -26,6 +26,7 @@ impl<'store, 'gpg> EditEntry<'store, 'gpg> {
             }
         })?;
         let encrypted_file = entry_name.encrypted_file_path(self.store.path());
+        self.store.check_path(&encrypted_file)?;
         let content = if encrypted_file.exists() {
             self.gpg.decrypt(&encrypted_file, None)?
         } else {

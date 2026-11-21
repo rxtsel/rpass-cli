@@ -122,6 +122,13 @@ pub fn generate_passphrase(options: &PassphraseOptions) -> Result<String, Passwo
 }
 
 fn validate_password_options(options: &PasswordOptions) -> Result<(), PasswordGeneratorError> {
+    if options
+        .symbols
+        .as_deref()
+        .is_some_and(|symbols| symbols.contains(['\r', '\n']))
+    {
+        return Err(PasswordGeneratorError::MultilineSecret);
+    }
     if options.length == 0 || options.length > MAX_PASSWORD_LENGTH {
         return Err(PasswordGeneratorError::InvalidLength {
             min: 1,
@@ -146,6 +153,9 @@ fn validate_password_options(options: &PasswordOptions) -> Result<(), PasswordGe
 }
 
 fn validate_passphrase_options(options: &PassphraseOptions) -> Result<(), PasswordGeneratorError> {
+    if options.separator.contains(['\r', '\n']) {
+        return Err(PasswordGeneratorError::MultilineSecret);
+    }
     if options.words == 0 || options.words > MAX_PASSPHRASE_WORDS {
         return Err(PasswordGeneratorError::InvalidWordCount {
             min: 1,
@@ -208,6 +218,9 @@ pub enum PasswordGeneratorError {
 
     #[error("passphrase word count must be between {min} and {max}")]
     InvalidWordCount { min: usize, max: usize },
+
+    #[error("generated secret must fit on one line")]
+    MultilineSecret,
 
     #[error("passphrase separator cannot be empty")]
     EmptySeparator,

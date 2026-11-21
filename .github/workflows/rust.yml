@@ -33,5 +33,17 @@ jobs:
       - name: run clippy
         run: cargo clippy --all-targets -- -D warnings
 
+      - name: install GnuPG on macOS
+        if: runner.os == 'macOS'
+        run: brew install gnupg
+
+      - name: use Git for Windows GnuPG
+        if: runner.os == 'Windows'
+        run: |
+          $gpg = Join-Path $env:ProgramFiles 'Git\usr\bin\gpg.exe'
+          if (!(Test-Path $gpg)) { throw "GnuPG not found at $gpg" }
+          Split-Path $gpg | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          & $gpg --version
+
       - name: run tests
         run: cargo test

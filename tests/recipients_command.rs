@@ -6,7 +6,7 @@ use std::path::Path;
 use predicates::prelude::*;
 use serde_json::Value;
 
-use support::{reencrypting_gpg_script, rpass};
+use support::{failing_gpg_script, reencrypting_gpg_script, rpass};
 
 #[test]
 fn lists_root_recipients() {
@@ -104,6 +104,29 @@ fn adds_recipient_without_duplicates() {
 }
 
 #[test]
+fn add_rejects_recipient_with_line_break_without_changing_recipients() {
+    let store = tempfile::TempDir::new().unwrap();
+    write_file(store.path().join(".gpg-id"), "original\n");
+    for recipient in ["alice\nbob", "alice\rbob", "# ignored", " alice"] {
+        rpass()
+            .args([
+                "--store-dir",
+                store.path().to_str().unwrap(),
+                "recipients",
+                "add",
+                recipient,
+            ])
+            .assert()
+            .failure()
+            .stderr(predicate::str::contains("invalid recipient"));
+        assert_eq!(
+            fs::read(store.path().join(".gpg-id")).unwrap(),
+            b"original\n"
+        );
+    }
+}
+
+#[test]
 fn adds_recipient_to_subfolder() {
     let store = tempfile::TempDir::new().expect("temp dir");
     write_file(store.path().join("team/.gpg-id"), "alice@example.invalid\n");
@@ -151,6 +174,91 @@ fn removes_recipient() {
     assert_eq!(
         fs::read_to_string(store.path().join(".gpg-id")).expect("gpg id"),
         "alice@example.invalid\n"
+    );
+}
+
+#[test]
+fn removing_last_recipient_removes_gpg_id_instead_of_leaving_empty_file() {
+    let store = tempfile::TempDir::new().unwrap();
+    write_file(store.path().join(".gpg-id"), "alice\n");
+    git(store.path(), ["init"]);
+    git(store.path(), ["config", "user.name", "rpass tests"]);
+    git(
+        store.path(),
+        ["config", "user.email", "rpass-tests@example.invalid"],
+    );
+    git(store.path(), ["add", ".gpg-id"]);
+    git(store.path(), ["commit", "-m", "initial store"]);
+    rpass()
+        .env("GIT_AUTHOR_NAME", "rpass tests")
+        .env("GIT_AUTHOR_EMAIL", "rpass-tests@example.invalid")
+        .env("GIT_COMMITTER_NAME", "rpass tests")
+        .env("GIT_COMMITTER_EMAIL", "rpass-tests@example.invalid")
+        .args([
+            "--store-dir",
+            store.path().to_str().unwrap(),
+            "recipients",
+            "--json",
+            "remove",
+            "alice",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("\"recipients\": []"));
+    assert!(!store.path().join(".gpg-id").exists());
+    assert!(git_output(store.path(), ["ls-tree", "-r", "--name-only", "HEAD"]).is_empty());
+}
+
+#[test]
+fn removing_last_subfolder_recipient_reencrypts_with_parent() {
+    let store = tempfile::TempDir::new().unwrap();
+    write_file(store.path().join(".gpg-id"), "root@example.invalid\n");
+    write_file(store.path().join("team/.gpg-id"), "team@example.invalid\n");
+    write_file(store.path().join("team/entry.gpg"), "secret\n");
+    let (gpg, log) = reencrypting_gpg_script(store.path());
+    rpass()
+        .env("PASSWORD_STORE_GPG", gpg)
+        .args([
+            "--store-dir",
+            store.path().to_str().unwrap(),
+            "recipients",
+            "--path",
+            "team",
+            "remove",
+            "team@example.invalid",
+        ])
+        .assert()
+        .success();
+    assert!(!store.path().join("team/.gpg-id").exists());
+    assert!(
+        fs::read_to_string(log)
+            .unwrap()
+            .contains("recipient:root@example.invalid")
+    );
+}
+
+#[test]
+fn removing_last_root_recipient_with_entries_preserves_access() {
+    let store = tempfile::TempDir::new().unwrap();
+    write_file(store.path().join(".gpg-id"), "alice\n");
+    write_file(store.path().join("entry.gpg"), "encrypted\n");
+    rpass()
+        .args([
+            "--store-dir",
+            store.path().to_str().unwrap(),
+            "recipients",
+            "remove",
+            "alice",
+        ])
+        .assert()
+        .failure();
+    assert_eq!(
+        fs::read_to_string(store.path().join(".gpg-id")).unwrap(),
+        "alice\n"
+    );
+    assert_eq!(
+        fs::read_to_string(store.path().join("entry.gpg")).unwrap(),
+        "encrypted\n"
     );
 }
 
@@ -243,6 +351,72 @@ fn add_auto_commits_when_store_is_git_repository() {
     assert_eq!(
         git_output(store.path(), ["log", "-1", "--pretty=%s"]).trim_end_matches(['\r', '\n']),
         "Added GPG id bob@example.invalid."
+    );
+}
+
+#[test]
+fn add_commits_reencrypted_entries_with_recipient_changes() {
+    let store = tempfile::TempDir::new().unwrap();
+    write_file(store.path().join(".gpg-id"), "alice@example.invalid\n");
+    write_file(store.path().join("entry.gpg"), "old ciphertext\n");
+    git(store.path(), ["init"]);
+    git(store.path(), ["config", "user.name", "rpass tests"]);
+    git(
+        store.path(),
+        ["config", "user.email", "rpass-tests@example.invalid"],
+    );
+    git(store.path(), ["add", ".gpg-id", "entry.gpg"]);
+    git(store.path(), ["commit", "-m", "initial store"]);
+    write_file(store.path().join("entry.gpg"), "new ciphertext\n");
+    let (gpg, _) = reencrypting_gpg_script(store.path());
+
+    rpass()
+        .env("PASSWORD_STORE_GPG", gpg)
+        .env("GIT_AUTHOR_NAME", "rpass tests")
+        .env("GIT_AUTHOR_EMAIL", "rpass-tests@example.invalid")
+        .env("GIT_COMMITTER_NAME", "rpass tests")
+        .env("GIT_COMMITTER_EMAIL", "rpass-tests@example.invalid")
+        .args([
+            "--store-dir",
+            store.path().to_str().unwrap(),
+            "recipients",
+            "add",
+            "bob@example.invalid",
+        ])
+        .assert()
+        .success();
+
+    let committed = git_output(store.path(), ["show", "--pretty=", "--name-only", "HEAD"]);
+    assert!(committed.lines().any(|path| path == ".gpg-id"));
+    assert!(committed.lines().any(|path| path == "entry.gpg"));
+}
+
+#[test]
+fn failed_reencryption_restores_recipient_file() {
+    let store = tempfile::TempDir::new().unwrap();
+    write_file(store.path().join(".gpg-id"), "alice\n");
+    write_file(store.path().join("entry.gpg"), "ciphertext\n");
+    rpass()
+        .env(
+            "PASSWORD_STORE_GPG",
+            failing_gpg_script(store.path(), "decryption failed"),
+        )
+        .args([
+            "--store-dir",
+            store.path().to_str().unwrap(),
+            "recipients",
+            "add",
+            "bob",
+        ])
+        .assert()
+        .failure();
+    assert_eq!(
+        fs::read_to_string(store.path().join(".gpg-id")).unwrap(),
+        "alice\n"
+    );
+    assert_eq!(
+        fs::read_to_string(store.path().join("entry.gpg")).unwrap(),
+        "ciphertext\n"
     );
 }
 

@@ -26,4 +26,13 @@ pub enum ImportError {
 
     #[error("import file contains no recognizable entries")]
     NoEntries,
+
+    #[error("import item {0} has no valid name")]
+    InvalidItemName(usize),
+
+    #[error("import item {0} has a multiline password that this store format cannot represent")]
+    MultilinePassword(usize),
+
+    #[error("import item {0} has a field that cannot be stored unchanged")]
+    InvalidField(usize),
 }

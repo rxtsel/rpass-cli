@@ -2,7 +2,7 @@ mod completion;
 mod tree_output;
 
 use std::io::{BufRead, IsTerminal, Read, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use clap::{ArgAction, Parser, Subcommand, ValueHint};
@@ -19,7 +19,7 @@ use crate::password_store::{
     DecryptedEntry, DoctorReport, EditEntry, GitCommand, GpgCommand, ImportEntries, ImportResult,
     InitStore, InitStoreResult, InsertEntry, ListEntries, MoveEntry, OtpCode, PasswordStore,
     ReEncryptEntries, Recipients, RecipientsResult, RemoveEntry, SearchEntries, ShowEntry,
-    StoreDirectory,
+    StoreDirectory, atomic_write, recipients_for_entry,
 };
 use tree_output::EntryTree;
 
@@ -494,21 +494,18 @@ fn print_json_entries(entries: &[String]) -> Result<(), CliError> {
 fn init_store(command: InitCommand, store_directory: StoreDirectory) -> Result<(), CliError> {
     validate_init_path(command.path.as_deref())?;
 
+    let previous = recipient_file_snapshot(&store_directory, command.path.as_deref())?;
     let result = InitStore::new(store_directory.clone())
         .execute(command.path.as_deref(), &command.gpg_ids)?;
     let store = PasswordStore::open(store_directory)?;
-
-    if !result.removed && !result.recipients.is_empty() {
-        let gpg = GpgCommand::from_environment();
-        ReEncryptEntries::new(&store, gpg).execute(
-            command.path.as_deref(),
-            &result.recipients,
-            None,
-        )?;
-    }
-
-    auto_commit(&store, &init_commit_message(&command, &result))?;
-
+    let mut changed = vec![result.gpg_id_path.clone()];
+    changed.extend(re_encrypt_after_change(
+        &store,
+        command.path.as_deref(),
+        &result.recipients,
+        &result.gpg_id_path,
+        previous,
+    )?);
     if command.json {
         print_json_init(&result)?;
     } else if result.removed {
@@ -517,6 +514,7 @@ fn init_store(command: InitCommand, store_directory: StoreDirectory) -> Result<(
         print_init_success(&command);
     }
 
+    auto_commit(&store, &init_commit_message(&command, &result), &changed)?;
     Ok(())
 }
 
@@ -579,37 +577,118 @@ fn normalize_path(path: &std::path::Path) -> String {
         .join("/")
 }
 
+fn recipient_file_snapshot(
+    directory: &StoreDirectory,
+    subfolder: Option<&str>,
+) -> Result<Option<Vec<u8>>, CliError> {
+    if !directory.path().exists() {
+        return Ok(None);
+    }
+    let path = recipient_file_path(directory.path(), subfolder);
+    PasswordStore::open(directory.clone())?.check_path(&path)?;
+    match std::fs::read(path) {
+        Ok(bytes) => Ok(Some(bytes)),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(crate::password_store::PasswordStoreError::Io(error).into()),
+    }
+}
+
+fn recipient_file_path(root: &Path, subfolder: Option<&str>) -> PathBuf {
+    subfolder
+        .map_or_else(|| root.to_path_buf(), |path| root.join(path))
+        .join(".gpg-id")
+}
+
+fn re_encrypt_after_change(
+    store: &PasswordStore,
+    subfolder: Option<&str>,
+    recipients: &[String],
+    gpg_id_path: &Path,
+    previous: Option<Vec<u8>>,
+) -> Result<Vec<PathBuf>, CliError> {
+    // shortcut: multi-file recipient changes are not power-loss atomic; use a durable journal if crash recovery must be automatic.
+    let result = (|| {
+        let effective = if recipients.is_empty() {
+            if let Some(subfolder) = subfolder {
+                let parent = store
+                    .path()
+                    .join(subfolder)
+                    .parent()
+                    .expect("subfolder parent")
+                    .to_path_buf();
+                match recipients_for_entry(store.path(), &parent.join("entry.gpg")) {
+                    Ok(recipients) => recipients,
+                    Err(crate::password_store::PasswordStoreError::GpgIdNotFound) => Vec::new(),
+                    Err(error) => return Err(error),
+                }
+            } else {
+                Vec::new()
+            }
+        } else {
+            recipients.to_vec()
+        };
+        ReEncryptEntries::new(store, GpgCommand::from_environment())
+            .execute(subfolder, &effective, None)
+    })();
+    match result {
+        Ok((changed, warning)) => {
+            if let Some(warning) = warning {
+                eprintln!("{warning}");
+            }
+            Ok(changed)
+        }
+        Err(error) => {
+            let path = store.path().join(gpg_id_path);
+            let restore = match previous {
+                Some(bytes) => atomic_write(&path, &bytes),
+                None => match std::fs::remove_file(&path) {
+                    Ok(()) => Ok(()),
+                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+                    Err(error) => Err(error.into()),
+                },
+            };
+            if let Err(restore_error) = restore {
+                return Err(
+                    crate::password_store::PasswordStoreError::Io(std::io::Error::other(format!(
+                        "re-encryption failed: {error}; recipient restore failed: {restore_error}"
+                    )))
+                    .into(),
+                );
+            }
+            Err(error.into())
+        }
+    }
+}
+
 fn recipients(command: RecipientsCommand, store_directory: StoreDirectory) -> Result<(), CliError> {
     validate_init_path(command.path.as_deref())?;
 
-    let store = PasswordStore::open(store_directory)?;
+    let store = PasswordStore::open(store_directory.clone())?;
+    let previous = if command.action.is_some() {
+        recipient_file_snapshot(&store_directory, command.path.as_deref())?
+    } else {
+        None
+    };
     let recipients = Recipients::new(&store);
     let result = match &command.action {
         Some(RecipientsAction::Add { key_id }) => {
-            let result = recipients.add(command.path.as_deref(), key_id)?;
-            if result.changed {
-                let gpg = GpgCommand::from_environment();
-                ReEncryptEntries::new(&store, gpg).execute(
-                    command.path.as_deref(),
-                    &result.recipients,
-                    None,
-                )?;
-                auto_commit(&store, &format!("Added GPG id {key_id}."))?;
-            }
-            result
+            recipients.add(command.path.as_deref(), key_id)?
         }
         Some(RecipientsAction::Remove { key_id }) => {
-            let result = recipients.remove(command.path.as_deref(), key_id)?;
-            let gpg = GpgCommand::from_environment();
-            ReEncryptEntries::new(&store, gpg).execute(
-                command.path.as_deref(),
-                &result.recipients,
-                None,
-            )?;
-            auto_commit(&store, &format!("Removed GPG id {key_id}."))?;
-            result
+            recipients.remove(command.path.as_deref(), key_id)?
         }
         None => recipients.list(command.path.as_deref())?,
+    };
+    let reencrypted = if result.changed {
+        re_encrypt_after_change(
+            &store,
+            command.path.as_deref(),
+            &result.recipients,
+            &result.gpg_id_path,
+            previous,
+        )?
+    } else {
+        Vec::new()
     };
 
     if command.json {
@@ -618,6 +697,17 @@ fn recipients(command: RecipientsCommand, store_directory: StoreDirectory) -> Re
         print_text_recipients(&command, &result);
     }
 
+    let mut changed = vec![result.gpg_id_path.clone()];
+    changed.extend(reencrypted);
+    match &command.action {
+        Some(RecipientsAction::Add { key_id }) if result.changed => {
+            auto_commit(&store, &format!("Added GPG id {key_id}."), &changed)?;
+        }
+        Some(RecipientsAction::Remove { key_id }) => {
+            auto_commit(&store, &format!("Removed GPG id {key_id}."), &changed)?;
+        }
+        _ => {}
+    }
     Ok(())
 }
 
@@ -688,15 +778,14 @@ fn insert_entry(command: InsertCommand, store_directory: StoreDirectory) -> Resu
     let content = command_entry_content(&command.entry, command.multiline, command.echo)?;
 
     InsertEntry::new(&store, &gpg).execute(&command.entry, &content, command.force)?;
-    auto_commit(
-        &store,
-        &format!("Added given password for {} to store.", command.entry),
-    )?;
-
     if command.json {
         print_json_insert(&command.entry)?;
     }
-
+    auto_commit(
+        &store,
+        &format!("Added given password for {} to store.", command.entry),
+        &[entry_git_path(&command.entry)],
+    )?;
     Ok(())
 }
 
@@ -716,18 +805,23 @@ fn import_entries(command: ImportCommand, store_directory: StoreDirectory) -> Re
     let result =
         ImportEntries::new(&store, &gpg).execute(&BitwardenImporter, &data, command.force)?;
 
-    auto_commit(
-        &store,
-        &format!("Imported {} entries from Bitwarden", result.imported),
-    )?;
-
     if command.json {
         print_json_import(&result, "Bitwarden")?;
     } else {
         print_text_import(&result, "Bitwarden");
     }
 
-    Ok(())
+    auto_commit(
+        &store,
+        &format!("Imported {} entries from Bitwarden", result.imported),
+        &result.written,
+    )?;
+
+    if result.errors.is_empty() {
+        Ok(())
+    } else {
+        Err(CliError::ImportIncomplete)
+    }
 }
 
 fn print_text_import(result: &ImportResult, source: &str) {
@@ -760,8 +854,12 @@ fn print_json_import(result: &ImportResult, source: &str) -> Result<(), CliError
     Ok(())
 }
 
-fn auto_commit(store: &PasswordStore, message: &str) -> Result<(), CliError> {
-    GitCommand::from_environment().auto_commit(store, message)?;
+fn entry_git_path(entry: &str) -> PathBuf {
+    PathBuf::from(format!("{entry}.gpg"))
+}
+
+fn auto_commit(store: &PasswordStore, message: &str, changed: &[PathBuf]) -> Result<(), CliError> {
+    GitCommand::from_environment().auto_commit(store, message, changed)?;
     Ok(())
 }
 
@@ -772,13 +870,16 @@ fn edit_entry(command: EditCommand, store_directory: StoreDirectory) -> Result<(
     let changed = EditEntry::new(&store, &gpg).execute(&command.entry)?;
 
     if changed {
-        auto_commit(&store, &format!("Edited password for {}.", command.entry))?;
-
         if command.json {
             print_json_insert(&command.entry)?;
         } else {
             println!("Entry '{}' updated", command.entry);
         }
+        auto_commit(
+            &store,
+            &format!("Edited password for {}.", command.entry),
+            &[entry_git_path(&command.entry)],
+        )?;
     }
 
     Ok(())
@@ -789,14 +890,16 @@ fn remove_entry(command: RemoveCommand, store_directory: StoreDirectory) -> Resu
 
     let store = PasswordStore::open(store_directory)?;
     RemoveEntry::new(&store).execute(&command.entry)?;
-    auto_commit(&store, &format!("Removed {} from store.", command.entry))?;
-
     if command.json {
         print_json_insert(&command.entry)?;
     } else {
         println!("Entry '{}' removed", command.entry);
     }
-
+    auto_commit(
+        &store,
+        &format!("Removed {} from store.", command.entry),
+        &[entry_git_path(&command.entry)],
+    )?;
     Ok(())
 }
 
@@ -820,12 +923,23 @@ fn confirm_remove(command: &RemoveCommand) -> Result<(), CliError> {
 
 fn move_entry(command: MoveCommand, store_directory: StoreDirectory) -> Result<(), CliError> {
     let store = PasswordStore::open(store_directory)?;
+    let directory = !store
+        .path()
+        .join(entry_git_path(&command.old_entry))
+        .exists()
+        && store.path().join(&command.old_entry).is_dir();
     MoveEntry::new(&store).execute(&command.old_entry, &command.new_entry, command.force)?;
-    auto_commit(
-        &store,
-        &format!("Renamed {} to {}.", command.old_entry, command.new_entry),
-    )?;
-
+    let changed = if directory {
+        vec![
+            PathBuf::from(&command.old_entry),
+            PathBuf::from(&command.new_entry),
+        ]
+    } else {
+        vec![
+            entry_git_path(&command.old_entry),
+            entry_git_path(&command.new_entry),
+        ]
+    };
     if command.json {
         print_json_move(&command.old_entry, &command.new_entry)?;
     } else {
@@ -834,7 +948,11 @@ fn move_entry(command: MoveCommand, store_directory: StoreDirectory) -> Result<(
             command.old_entry, command.new_entry
         );
     }
-
+    auto_commit(
+        &store,
+        &format!("Renamed {} to {}.", command.old_entry, command.new_entry),
+        &changed,
+    )?;
     Ok(())
 }
 
@@ -870,7 +988,9 @@ fn generate_entry(
 
     let password = generated_secret(&command)?;
 
-    if !command.dry_run {
+    let saved = if command.dry_run {
+        None
+    } else {
         let entry = command
             .entry
             .as_deref()
@@ -878,20 +998,22 @@ fn generate_entry(
         let store = PasswordStore::open(store_directory)?;
         let gpg = GpgCommand::from_environment();
         let content = format!("{password}\n");
-
         InsertEntry::new(&store, &gpg).execute(entry, &content, command.force)?;
-        auto_commit(
-            &store,
-            &format!("Added generated password for {entry} to store."),
-        )?;
-    }
+        Some((store, entry))
+    };
 
     if command.json {
         print_json_generate(command.entry.as_deref(), &password, command.dry_run)?;
     } else {
         println!("{password}");
     }
-
+    if let Some((store, entry)) = saved {
+        auto_commit(
+            &store,
+            &format!("Added generated password for {entry} to store."),
+            &[entry_git_path(entry)],
+        )?;
+    }
     Ok(())
 }
 
@@ -1260,6 +1382,9 @@ pub enum CliError {
     #[error("import failed: {0}")]
     ImportFailed(String),
 
+    #[error("import incomplete: some entries could not be saved")]
+    ImportIncomplete,
+
     #[error("error already reported")]
     Reported,
 
@@ -1290,6 +1415,7 @@ impl CliError {
             Self::RemoveAborted => "remove_aborted",
             Self::DoctorFailed => "doctor_checks_failed",
             Self::ImportFailed(_) => "import_failed",
+            Self::ImportIncomplete => "import_incomplete",
             Self::Reported => "reported",
             Self::NoEntryPoint => "no_entry_or_subcommand_provided",
         }

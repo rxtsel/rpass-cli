@@ -1,5 +1,7 @@
 mod support;
 
+use std::fs;
+
 use predicates::prelude::*;
 use tempfile::TempDir;
 
@@ -24,6 +26,54 @@ fn shows_decrypted_entry_as_text() {
         .assert()
         .success()
         .stdout("secret\nusername: alice\n");
+}
+
+#[test]
+fn shows_existing_entry_named_git_without_entering_git_metadata() {
+    let store = password_store_with_entry(".git.gpg");
+    let gpg = successful_gpg_script(store.path(), "secret\n");
+    rpass()
+        .env("PASSWORD_STORE_GPG", gpg)
+        .args([
+            "--store-dir",
+            store.path().to_str().unwrap(),
+            "show",
+            ".git",
+        ])
+        .assert()
+        .success()
+        .stdout("secret\n");
+    fs::create_dir(store.path().join(".git")).unwrap();
+    fs::write(store.path().join(".git/hidden.gpg"), "ciphertext").unwrap();
+    rpass()
+        .args([
+            "--store-dir",
+            store.path().to_str().unwrap(),
+            "show",
+            ".git/hidden",
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("outside the password store"));
+}
+
+#[cfg(unix)]
+#[test]
+fn shows_existing_entry_with_line_break_in_name() {
+    let store = password_store_with_entry("foo\nbar.gpg");
+    let gpg = successful_gpg_script(store.path(), "secret\n");
+    rpass()
+        .env("PASSWORD_STORE_GPG", gpg)
+        .args([
+            "--store-dir",
+            store.path().to_str().unwrap(),
+            "show",
+            "foo\nbar",
+            "--json",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("\"password\": \"secret\""));
 }
 
 #[test]

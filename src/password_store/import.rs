@@ -1,6 +1,9 @@
+use std::collections::HashSet;
+use std::path::PathBuf;
+
 use super::{
-    EntryName, GpgCommand, InsertEntry, PasswordStore, PasswordStoreError,
-    importer::{ImportEntry, Importer},
+    EntryName, GpgCommand, InsertEntry, ListEntries, PasswordStore, PasswordStoreError,
+    importer::{ImportEntry, ImportError, Importer},
 };
 
 #[derive(Debug)]
@@ -8,6 +11,7 @@ pub struct ImportResult {
     pub imported: usize,
     pub skipped: usize,
     pub errors: Vec<String>,
+    pub written: Vec<PathBuf>,
 }
 
 pub struct ImportEntries<'store, 'gpg> {
@@ -29,19 +33,39 @@ impl<'store, 'gpg> ImportEntries<'store, 'gpg> {
         let entries = importer
             .parse(data)
             .map_err(|error| PasswordStoreError::ImportFailed(error.to_string()))?;
+        for (index, entry) in entries.iter().enumerate() {
+            if EntryName::from_user_input(&sanitized_entry_name(entry)).is_err() {
+                return Err(PasswordStoreError::ImportFailed(
+                    ImportError::InvalidItemName(index + 1).to_string(),
+                ));
+            }
+        }
 
         let total = entries.len();
+        let existing = ListEntries::new(self.store)
+            .execute()?
+            .into_iter()
+            .collect::<HashSet<_>>();
         let mut imported = 0;
         let mut errors = Vec::new();
+        let mut written = Vec::new();
+        let mut imported_names = HashSet::new();
 
         for entry in entries {
-            match self.insert_import_entry(entry, force) {
-                Ok(()) => imported += 1,
+            match self.insert_import_entry(entry, force, &existing, &imported_names) {
+                Ok(name) => {
+                    imported += 1;
+                    written.push(PathBuf::from(format!("{name}.gpg")));
+                    // shortcut: Unicode case folding can differ from the filesystem; use file identity if imports need those names.
+                    imported_names.insert(name.to_lowercase());
+                }
                 Err(PasswordStoreError::EntryAlreadyExists(name)) => {
-                    errors.push(format!(
-                        "'{}' already exists; use --force to overwrite or resolve manually",
-                        name
-                    ));
+                    let advice = if force {
+                        "resolve manually"
+                    } else {
+                        "use --force to overwrite or resolve manually"
+                    };
+                    errors.push(format!("'{name}' already exists; {advice}"));
                 }
                 Err(e) => {
                     errors.push(e.to_string());
@@ -53,6 +77,7 @@ impl<'store, 'gpg> ImportEntries<'store, 'gpg> {
             imported,
             skipped: total - imported,
             errors,
+            written,
         })
     }
 
@@ -60,23 +85,25 @@ impl<'store, 'gpg> ImportEntries<'store, 'gpg> {
         &self,
         entry: ImportEntry,
         force: bool,
-    ) -> Result<(), PasswordStoreError> {
-        let sanitized_folder = entry.folder.as_deref().map(sanitize_path);
-        let sanitized_name = sanitize_segment(&entry.name);
-        let base_name = match sanitized_folder {
-            Some(ref folder) => format!("{folder}/{sanitized_name}"),
-            None => sanitized_name,
-        };
+        existing: &HashSet<String>,
+        imported_names: &HashSet<String>,
+    ) -> Result<String, PasswordStoreError> {
+        let base_name = sanitized_entry_name(&entry);
 
-        let name = self.resolve_entry_name(&base_name, force)?;
+        if !force && existing.contains(&base_name) {
+            return Err(PasswordStoreError::EntryAlreadyExists(base_name));
+        }
+        let name = self.resolve_entry_name(&base_name, force, imported_names)?;
         let content = build_entry_content(&entry);
-        InsertEntry::new(self.store, self.gpg).execute(&name, &content, true)
+        InsertEntry::new(self.store, self.gpg).execute(&name, &content, true)?;
+        Ok(name)
     }
 
     fn resolve_entry_name(
         &self,
         base_name: &str,
         force: bool,
+        imported_names: &HashSet<String>,
     ) -> Result<String, PasswordStoreError> {
         let entry_name = EntryName::from_user_input(base_name).map_err(|error| {
             PasswordStoreError::InvalidEntryName {
@@ -86,7 +113,9 @@ impl<'store, 'gpg> ImportEntries<'store, 'gpg> {
         })?;
         let encrypted_file = entry_name.encrypted_file_path(self.store.path());
 
-        if !encrypted_file.exists() || force {
+        if !imported_names.contains(&base_name.to_lowercase())
+            && (!encrypted_file.exists() || force)
+        {
             return Ok(entry_name.into_string());
         }
 
@@ -98,13 +127,30 @@ impl<'store, 'gpg> ImportEntries<'store, 'gpg> {
                     reason: error.message(),
                 }
             })?;
-            let encrypted_file = entry_name.encrypted_file_path(self.store.path());
-            if !encrypted_file.exists() {
-                return Ok(entry_name.into_string());
+            if imported_names.contains(&entry_name.as_str().to_lowercase()) {
+                continue;
             }
+            let encrypted_file = entry_name.encrypted_file_path(self.store.path());
+            if encrypted_file.exists() {
+                if force {
+                    return Err(PasswordStoreError::EntryAlreadyExists(
+                        entry_name.into_string(),
+                    ));
+                }
+                continue;
+            }
+            return Ok(entry_name.into_string());
         }
 
         Err(PasswordStoreError::EntryAlreadyExists(base_name.to_owned()))
+    }
+}
+
+fn sanitized_entry_name(entry: &ImportEntry) -> String {
+    let name = sanitize_segment(&entry.name);
+    match entry.folder.as_deref().map(sanitize_path) {
+        Some(folder) => format!("{folder}/{name}"),
+        None => name,
     }
 }
 
@@ -136,6 +182,7 @@ fn sanitize_segment(segment: &str) -> String {
     for c in segment.trim().chars() {
         match c {
             '\0' | '\t' | '\'' | '[' | ']' => {}
+            _ if c.is_control() => cleaned.push('-'),
             _ if is_invalid(c) => {
                 let replacement = INVALIDS
                     .iter()
@@ -169,7 +216,7 @@ fn build_entry_content(entry: &ImportEntry) -> String {
 
     if let Some(ref notes) = entry.notes {
         for line in notes.lines() {
-            lines.push(line.to_owned());
+            lines.push(format!("# rpass-note {line}"));
         }
     }
 
@@ -193,6 +240,11 @@ mod tests {
     #[test]
     fn segment_strips_control_chars() {
         assert_eq!(sanitize_segment("foo\x00bar\tbaz"), "foobarbaz");
+    }
+
+    #[test]
+    fn segment_replaces_line_breaks() {
+        assert_eq!(sanitize_segment("foo\nbar\rbaz"), "foo-bar-baz");
     }
 
     #[test]
@@ -252,7 +304,7 @@ mod tests {
         let content = build_entry_content(&entry);
         assert_eq!(
             content,
-            "secret\nusername: alice\nurl: https://example.com\notpauth://totp/test?secret=ABC\nSome notes\nwith multiple lines\n"
+            "secret\nusername: alice\nurl: https://example.com\notpauth://totp/test?secret=ABC\n# rpass-note Some notes\n# rpass-note with multiple lines\n"
         );
     }
 
@@ -268,6 +320,6 @@ mod tests {
         };
 
         let content = build_entry_content(&entry);
-        assert_eq!(content, "\nJust a note\n");
+        assert_eq!(content, "\n# rpass-note Just a note\n");
     }
 }

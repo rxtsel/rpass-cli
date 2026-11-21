@@ -500,13 +500,19 @@ mod path_matching_tests {
 
     #[cfg(unix)]
     #[test]
-    fn does_not_match_distinct_files_in_case_sensitive_directory() {
+    fn matches_case_variants_only_when_they_are_the_same_file() {
+        use std::os::unix::fs::MetadataExt;
+
         let root = tempfile::TempDir::new().unwrap();
         fs::write(root.path().join("Foo.gpg"), "unrelated").unwrap();
         fs::write(root.path().join("foo.gpg"), "changed").unwrap();
-        assert!(
-            !git_path_starts_with_windows(root.path(), Path::new("Foo.gpg"), Path::new("foo.gpg"))
-                .unwrap()
+        let upper = fs::metadata(root.path().join("Foo.gpg")).unwrap();
+        let lower = fs::metadata(root.path().join("foo.gpg")).unwrap();
+        let same_file = upper.dev() == lower.dev() && upper.ino() == lower.ino();
+        assert_eq!(
+            git_path_starts_with_windows(root.path(), Path::new("Foo.gpg"), Path::new("foo.gpg"))
+                .unwrap(),
+            same_file
         );
         assert!(
             git_path_starts_with_windows(root.path(), Path::new("foo.gpg"), Path::new("foo.gpg"))

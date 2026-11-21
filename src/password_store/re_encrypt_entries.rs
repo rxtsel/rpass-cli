@@ -149,7 +149,9 @@ mod tests {
 
     use tempfile::{NamedTempFile, TempDir};
 
-    use super::{close_backup, install_staged};
+    #[cfg(unix)]
+    use super::close_backup;
+    use super::install_staged;
 
     #[test]
     fn failed_second_install_restores_first_ciphertext() {

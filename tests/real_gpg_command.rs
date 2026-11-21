@@ -1,5 +1,3 @@
-#![cfg(target_os = "linux")]
-
 mod support;
 
 use std::fs;
@@ -9,7 +7,7 @@ use std::process::{Command, Stdio};
 use support::rpass;
 
 #[test]
-fn changing_recipients_keeps_entries_decryptable_with_real_gpg() {
+fn changing_recipients_grants_bob_and_revokes_alice_with_real_gpg() {
     let gpg = "gpg";
     assert!(
         Command::new(gpg)
@@ -45,6 +43,24 @@ fn changing_recipients_keeps_entries_decryptable_with_real_gpg() {
     let root = store.path().to_str().unwrap();
     let alice = "Alice@example.invalid";
     let bob = "Bob@example.invalid";
+    let alice_home = tempfile::TempDir::new().unwrap();
+    let bob_home = tempfile::TempDir::new().unwrap();
+    for (name, destination) in [(alice, alice_home.path()), (bob, bob_home.path())] {
+        let key = Command::new(gpg)
+            .env("GNUPGHOME", home.path())
+            .args(["--batch", "--export-secret-keys", name])
+            .output()
+            .unwrap();
+        assert!(key.status.success());
+        let mut import = Command::new(gpg)
+            .env("GNUPGHOME", destination)
+            .args(["--batch", "--import"])
+            .stdin(Stdio::piped())
+            .spawn()
+            .unwrap();
+        import.stdin.take().unwrap().write_all(&key.stdout).unwrap();
+        assert!(import.wait().unwrap().success());
+    }
     rpass()
         .env("GNUPGHOME", home.path())
         .args(["--store-dir", root, "init", alice])
@@ -62,30 +78,21 @@ fn changing_recipients_keeps_entries_decryptable_with_real_gpg() {
         .assert()
         .success();
     rpass()
+        .env("GNUPGHOME", alice_home.path())
+        .args(["--store-dir", root, "show", "entry"])
+        .assert()
+        .success()
+        .stdout("test-secret\n");
+    rpass()
         .env("GNUPGHOME", home.path())
         .args(["--store-dir", root, "recipients", "remove", alice])
         .assert()
         .success();
-    let bob_home = tempfile::TempDir::new().unwrap();
-    let bob_key = Command::new(gpg)
-        .env("GNUPGHOME", home.path())
-        .args(["--batch", "--export-secret-keys", bob])
-        .output()
-        .unwrap();
-    assert!(bob_key.status.success());
-    let mut import = Command::new(gpg)
-        .env("GNUPGHOME", bob_home.path())
-        .args(["--batch", "--import"])
-        .stdin(Stdio::piped())
-        .spawn()
-        .unwrap();
-    import
-        .stdin
-        .take()
-        .unwrap()
-        .write_all(&bob_key.stdout)
-        .unwrap();
-    assert!(import.wait().unwrap().success());
+    rpass()
+        .env("GNUPGHOME", alice_home.path())
+        .args(["--store-dir", root, "show", "entry"])
+        .assert()
+        .failure();
     rpass()
         .env("GNUPGHOME", bob_home.path())
         .args(["--store-dir", root, "show", "entry"])

@@ -199,7 +199,8 @@ fn git_init_handles_more_paths_than_a_windows_command_line() {
     assert_eq!(output.stdout.split(|byte| *byte == b'\n').count() - 1, 401);
 }
 
-#[cfg(unix)]
+// macOS rejects non-UTF-8 filenames before Git can inspect them.
+#[cfg(all(unix, not(target_os = "macos")))]
 #[test]
 fn git_init_preserves_non_utf8_filenames() {
     use std::ffi::OsStr;

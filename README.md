@@ -73,7 +73,7 @@ rpass doctor                              # check your local setup
 
 ## JSON Output
 
-Most read commands accept `--json`. On success, stdout contains the JSON value and stderr is empty. On error, the exit code is non-zero and stderr contains an error. If a write succeeds but its automatic Git commit fails, stdout still reports what changed (including any generated password); check both streams before retrying. Errors look like:
+Most read commands accept `--json`. On success, stdout contains the JSON value; stderr is empty unless cleanup of old ciphertext fails, in which case it includes a warning and the backup path. On error, the exit code is non-zero and stderr contains an error. If a write succeeds but its automatic Git commit fails, stdout still reports what changed (including any generated password); check both streams before retrying. Errors look like:
 
 ```json
 {
@@ -123,7 +123,7 @@ rpass completions powershell >> $PROFILE
 **Known differences from `pass`:**
 - `generate`, `insert`, `edit`, `rm`, and `mv` for writes
 - Git commands are explicit (`rpass git <args>`); writes auto-commit only when the store is a Git repository. `rpass git init` accepts only branch and quiet options, so it cannot initialize a different directory or a bare repository
-- Changing recipients with `init` or `recipients` re-encrypts affected entries when recipients remain. Removing a subfolder's last recipient deletes its `.gpg-id`, so new entries inherit the parent folder's recipients; existing entries are not re-encrypted in that case
+- Changing recipients with `init` or `recipients` re-encrypts affected entries. Removing a subfolder's last recipient re-encrypts its entries for the inherited parent recipients before deleting `.gpg-id`; removing the root's last recipient is refused while entries remain
 - Moving entries between folders with different recipients is refused; re-encrypt them for the new recipients first
 - Clipboard and QR codes are not implemented
 - Unsupported `pass` flags are rejected instead of ignored

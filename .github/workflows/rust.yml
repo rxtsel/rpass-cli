@@ -33,5 +33,13 @@ jobs:
       - name: run clippy
         run: cargo clippy --all-targets -- -D warnings
 
+      - name: install GnuPG on macOS
+        if: runner.os == 'macOS'
+        run: brew install gnupg
+
+      - name: install GnuPG on Windows
+        if: runner.os == 'Windows'
+        run: choco install gnupg --no-progress --yes
+
       - name: run tests
         run: cargo test

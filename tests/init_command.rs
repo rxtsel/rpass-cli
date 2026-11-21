@@ -164,6 +164,33 @@ fn init_with_empty_gpg_id_removes_existing_gpg_id_for_path() {
 }
 
 #[test]
+fn init_removing_subfolder_reencrypts_with_parent() {
+    let store = tempfile::TempDir::new().unwrap();
+    write_file(store.path().join(".gpg-id"), "root@example.invalid\n");
+    write_file(store.path().join("team/.gpg-id"), "team@example.invalid\n");
+    write_file(store.path().join("team/entry.gpg"), "secret\n");
+    let (gpg, log) = reencrypting_gpg_script(store.path());
+    rpass()
+        .env("PASSWORD_STORE_GPG", gpg)
+        .args([
+            "--store-dir",
+            store.path().to_str().unwrap(),
+            "init",
+            "--path",
+            "team",
+            "",
+        ])
+        .assert()
+        .success();
+    assert!(!store.path().join("team/.gpg-id").exists());
+    assert!(
+        fs::read_to_string(log)
+            .unwrap()
+            .contains("recipient:root@example.invalid")
+    );
+}
+
+#[test]
 fn init_reports_success_as_json() {
     let store = tempfile::TempDir::new().expect("temp dir");
 
@@ -299,6 +326,56 @@ fn init_re_encrypts_existing_entries_with_new_recipients() {
         fs::read_to_string(store.path().join("subdir/nested.gpg")).expect("nested entry"),
         "nested-secret\n",
         "nested content should be preserved after re-encryption"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn failed_second_reencryption_restores_recipients_and_ciphertexts() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let store = tempfile::TempDir::new().unwrap();
+    write_file(store.path().join(".gpg-id"), "old@example.invalid\n");
+    write_file(store.path().join("first.gpg"), "first ciphertext\n");
+    write_file(store.path().join("second.gpg"), "second ciphertext\n");
+    let script = store.path().join("gpg-fail-second");
+    fs::write(
+        &script,
+        format!(
+            "#!/bin/sh\nmode=encrypt\noutput=\ninput=\nwhile [ $# -gt 0 ]; do\n  case \"$1\" in\n    --decrypt) mode=decrypt; shift;;\n    --output) output=$2; shift 2;;\n    --recipient) shift 2;;\n    -*) shift;;\n    *) input=$1; shift;;\n  esac\ndone\nif [ \"$mode\" = decrypt ]; then cat \"$input\"; exit; fi\ncount=$(cat '{counter}' 2>/dev/null || echo 0)\nif [ \"$count\" = 1 ]; then exit 1; fi\necho 1 > '{counter}'\ncat > \"$output\"\n",
+            counter = store.path().join("count").display()
+        ),
+    )
+    .unwrap();
+    let mut permissions = fs::metadata(&script).unwrap().permissions();
+    permissions.set_mode(0o755);
+    fs::set_permissions(&script, permissions).unwrap();
+
+    rpass()
+        .env("PASSWORD_STORE_GPG", script)
+        .args([
+            "--store-dir",
+            store.path().to_str().unwrap(),
+            "init",
+            "new@example.invalid",
+        ])
+        .assert()
+        .failure();
+    assert_eq!(
+        fs::read_to_string(store.path().join("count")).unwrap(),
+        "1\n"
+    );
+    assert_eq!(
+        fs::read_to_string(store.path().join(".gpg-id")).unwrap(),
+        "old@example.invalid\n"
+    );
+    assert_eq!(
+        fs::read_to_string(store.path().join("first.gpg")).unwrap(),
+        "first ciphertext\n"
+    );
+    assert_eq!(
+        fs::read_to_string(store.path().join("second.gpg")).unwrap(),
+        "second ciphertext\n"
     );
 }
 

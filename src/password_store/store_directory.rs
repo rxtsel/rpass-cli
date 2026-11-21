@@ -68,7 +68,7 @@ impl PasswordStore {
     }
 }
 
-pub(super) fn atomic_write(path: &Path, contents: &[u8]) -> Result<(), PasswordStoreError> {
+pub(crate) fn atomic_write(path: &Path, contents: &[u8]) -> Result<(), PasswordStoreError> {
     let parent = path.parent().unwrap_or_else(|| Path::new("."));
     let mut staged = tempfile::NamedTempFile::new_in(parent)?;
     staged.write_all(contents)?;

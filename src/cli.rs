@@ -2,7 +2,7 @@ mod completion;
 mod tree_output;
 
 use std::io::{BufRead, IsTerminal, Read, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use clap::{ArgAction, Parser, Subcommand, ValueHint};
@@ -19,7 +19,7 @@ use crate::password_store::{
     DecryptedEntry, DoctorReport, EditEntry, GitCommand, GpgCommand, ImportEntries, ImportResult,
     InitStore, InitStoreResult, InsertEntry, ListEntries, MoveEntry, OtpCode, PasswordStore,
     ReEncryptEntries, Recipients, RecipientsResult, RemoveEntry, SearchEntries, ShowEntry,
-    StoreDirectory,
+    StoreDirectory, atomic_write, recipients_for_entry,
 };
 use tree_output::EntryTree;
 
@@ -494,18 +494,18 @@ fn print_json_entries(entries: &[String]) -> Result<(), CliError> {
 fn init_store(command: InitCommand, store_directory: StoreDirectory) -> Result<(), CliError> {
     validate_init_path(command.path.as_deref())?;
 
+    let previous = recipient_file_snapshot(&store_directory, command.path.as_deref())?;
     let result = InitStore::new(store_directory.clone())
         .execute(command.path.as_deref(), &command.gpg_ids)?;
     let store = PasswordStore::open(store_directory)?;
     let mut changed = vec![result.gpg_id_path.clone()];
-    if !result.removed && !result.recipients.is_empty() {
-        let gpg = GpgCommand::from_environment();
-        changed.extend(ReEncryptEntries::new(&store, gpg).execute(
-            command.path.as_deref(),
-            &result.recipients,
-            None,
-        )?);
-    }
+    changed.extend(re_encrypt_after_change(
+        &store,
+        command.path.as_deref(),
+        &result.recipients,
+        &result.gpg_id_path,
+        previous,
+    )?);
     if command.json {
         print_json_init(&result)?;
     } else if result.removed {
@@ -577,32 +577,118 @@ fn normalize_path(path: &std::path::Path) -> String {
         .join("/")
 }
 
+fn recipient_file_snapshot(
+    directory: &StoreDirectory,
+    subfolder: Option<&str>,
+) -> Result<Option<Vec<u8>>, CliError> {
+    if !directory.path().exists() {
+        return Ok(None);
+    }
+    let path = recipient_file_path(directory.path(), subfolder);
+    PasswordStore::open(directory.clone())?.check_path(&path)?;
+    match std::fs::read(path) {
+        Ok(bytes) => Ok(Some(bytes)),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(crate::password_store::PasswordStoreError::Io(error).into()),
+    }
+}
+
+fn recipient_file_path(root: &Path, subfolder: Option<&str>) -> PathBuf {
+    subfolder
+        .map_or_else(|| root.to_path_buf(), |path| root.join(path))
+        .join(".gpg-id")
+}
+
+fn re_encrypt_after_change(
+    store: &PasswordStore,
+    subfolder: Option<&str>,
+    recipients: &[String],
+    gpg_id_path: &Path,
+    previous: Option<Vec<u8>>,
+) -> Result<Vec<PathBuf>, CliError> {
+    // shortcut: multi-file recipient changes are not power-loss atomic; use a durable journal if crash recovery must be automatic.
+    let result = (|| {
+        let effective = if recipients.is_empty() {
+            if let Some(subfolder) = subfolder {
+                let parent = store
+                    .path()
+                    .join(subfolder)
+                    .parent()
+                    .expect("subfolder parent")
+                    .to_path_buf();
+                match recipients_for_entry(store.path(), &parent.join("entry.gpg")) {
+                    Ok(recipients) => recipients,
+                    Err(crate::password_store::PasswordStoreError::GpgIdNotFound) => Vec::new(),
+                    Err(error) => return Err(error),
+                }
+            } else {
+                Vec::new()
+            }
+        } else {
+            recipients.to_vec()
+        };
+        ReEncryptEntries::new(store, GpgCommand::from_environment())
+            .execute(subfolder, &effective, None)
+    })();
+    match result {
+        Ok((changed, warning)) => {
+            if let Some(warning) = warning {
+                eprintln!("{warning}");
+            }
+            Ok(changed)
+        }
+        Err(error) => {
+            let path = store.path().join(gpg_id_path);
+            let restore = match previous {
+                Some(bytes) => atomic_write(&path, &bytes),
+                None => match std::fs::remove_file(&path) {
+                    Ok(()) => Ok(()),
+                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+                    Err(error) => Err(error.into()),
+                },
+            };
+            if let Err(restore_error) = restore {
+                return Err(
+                    crate::password_store::PasswordStoreError::Io(std::io::Error::other(format!(
+                        "re-encryption failed: {error}; recipient restore failed: {restore_error}"
+                    )))
+                    .into(),
+                );
+            }
+            Err(error.into())
+        }
+    }
+}
+
 fn recipients(command: RecipientsCommand, store_directory: StoreDirectory) -> Result<(), CliError> {
     validate_init_path(command.path.as_deref())?;
 
-    let store = PasswordStore::open(store_directory)?;
+    let store = PasswordStore::open(store_directory.clone())?;
+    let previous = if command.action.is_some() {
+        recipient_file_snapshot(&store_directory, command.path.as_deref())?
+    } else {
+        None
+    };
     let recipients = Recipients::new(&store);
-    let (result, reencrypted) = match &command.action {
+    let result = match &command.action {
         Some(RecipientsAction::Add { key_id }) => {
-            let result = recipients.add(command.path.as_deref(), key_id)?;
-            let reencrypted = if result.changed {
-                ReEncryptEntries::new(&store, GpgCommand::from_environment()).execute(
-                    command.path.as_deref(),
-                    &result.recipients,
-                    None,
-                )?
-            } else {
-                Vec::new()
-            };
-            (result, reencrypted)
+            recipients.add(command.path.as_deref(), key_id)?
         }
         Some(RecipientsAction::Remove { key_id }) => {
-            let result = recipients.remove(command.path.as_deref(), key_id)?;
-            let reencrypted = ReEncryptEntries::new(&store, GpgCommand::from_environment())
-                .execute(command.path.as_deref(), &result.recipients, None)?;
-            (result, reencrypted)
+            recipients.remove(command.path.as_deref(), key_id)?
         }
-        None => (recipients.list(command.path.as_deref())?, Vec::new()),
+        None => recipients.list(command.path.as_deref())?,
+    };
+    let reencrypted = if result.changed {
+        re_encrypt_after_change(
+            &store,
+            command.path.as_deref(),
+            &result.recipients,
+            &result.gpg_id_path,
+            previous,
+        )?
+    } else {
+        Vec::new()
     };
 
     if command.json {

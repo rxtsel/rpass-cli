@@ -6,7 +6,7 @@ use std::path::Path;
 use predicates::prelude::*;
 use serde_json::Value;
 
-use support::{reencrypting_gpg_script, rpass};
+use support::{failing_gpg_script, reencrypting_gpg_script, rpass};
 
 #[test]
 fn lists_root_recipients() {
@@ -210,6 +210,59 @@ fn removing_last_recipient_removes_gpg_id_instead_of_leaving_empty_file() {
 }
 
 #[test]
+fn removing_last_subfolder_recipient_reencrypts_with_parent() {
+    let store = tempfile::TempDir::new().unwrap();
+    write_file(store.path().join(".gpg-id"), "root@example.invalid\n");
+    write_file(store.path().join("team/.gpg-id"), "team@example.invalid\n");
+    write_file(store.path().join("team/entry.gpg"), "secret\n");
+    let (gpg, log) = reencrypting_gpg_script(store.path());
+    rpass()
+        .env("PASSWORD_STORE_GPG", gpg)
+        .args([
+            "--store-dir",
+            store.path().to_str().unwrap(),
+            "recipients",
+            "--path",
+            "team",
+            "remove",
+            "team@example.invalid",
+        ])
+        .assert()
+        .success();
+    assert!(!store.path().join("team/.gpg-id").exists());
+    assert!(
+        fs::read_to_string(log)
+            .unwrap()
+            .contains("recipient:root@example.invalid")
+    );
+}
+
+#[test]
+fn removing_last_root_recipient_with_entries_preserves_access() {
+    let store = tempfile::TempDir::new().unwrap();
+    write_file(store.path().join(".gpg-id"), "alice\n");
+    write_file(store.path().join("entry.gpg"), "encrypted\n");
+    rpass()
+        .args([
+            "--store-dir",
+            store.path().to_str().unwrap(),
+            "recipients",
+            "remove",
+            "alice",
+        ])
+        .assert()
+        .failure();
+    assert_eq!(
+        fs::read_to_string(store.path().join(".gpg-id")).unwrap(),
+        "alice\n"
+    );
+    assert_eq!(
+        fs::read_to_string(store.path().join("entry.gpg")).unwrap(),
+        "encrypted\n"
+    );
+}
+
+#[test]
 fn remove_missing_recipient_returns_json_error() {
     let store = tempfile::TempDir::new().expect("temp dir");
     write_file(store.path().join(".gpg-id"), "alice@example.invalid\n");
@@ -336,6 +389,35 @@ fn add_commits_reencrypted_entries_with_recipient_changes() {
     let committed = git_output(store.path(), ["show", "--pretty=", "--name-only", "HEAD"]);
     assert!(committed.lines().any(|path| path == ".gpg-id"));
     assert!(committed.lines().any(|path| path == "entry.gpg"));
+}
+
+#[test]
+fn failed_reencryption_restores_recipient_file() {
+    let store = tempfile::TempDir::new().unwrap();
+    write_file(store.path().join(".gpg-id"), "alice\n");
+    write_file(store.path().join("entry.gpg"), "ciphertext\n");
+    rpass()
+        .env(
+            "PASSWORD_STORE_GPG",
+            failing_gpg_script(store.path(), "decryption failed"),
+        )
+        .args([
+            "--store-dir",
+            store.path().to_str().unwrap(),
+            "recipients",
+            "add",
+            "bob",
+        ])
+        .assert()
+        .failure();
+    assert_eq!(
+        fs::read_to_string(store.path().join(".gpg-id")).unwrap(),
+        "alice\n"
+    );
+    assert_eq!(
+        fs::read_to_string(store.path().join("entry.gpg")).unwrap(),
+        "ciphertext\n"
+    );
 }
 
 #[test]
